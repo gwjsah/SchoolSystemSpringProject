@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* One accent color for the whole app. Change these two lines to re-theme. */
+@theme {
+  --color-accent: oklch(0.51 0.23 277); /* indigo-600 */
+  --color-accent-hover: oklch(0.457 0.24 277.023); /* indigo-700 */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100;
+}
+

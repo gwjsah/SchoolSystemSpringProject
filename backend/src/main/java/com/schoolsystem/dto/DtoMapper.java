@@ -1,0 +1,180 @@
+package com.schoolsystem.dto;
+
+import com.schoolsystem.dto.Responses.AccountDto;
+import com.schoolsystem.dto.Responses.AnnouncementDto;
+import com.schoolsystem.dto.Responses.BalanceDto;
+import com.schoolsystem.dto.Responses.CartItemDto;
+import com.schoolsystem.dto.Responses.CourseDto;
+import com.schoolsystem.dto.Responses.EnrollmentDto;
+import com.schoolsystem.dto.Responses.GradeDto;
+import com.schoolsystem.dto.Responses.PaymentDto;
+import com.schoolsystem.dto.Responses.QuarterlyScheduleDto;
+import com.schoolsystem.dto.Responses.RoomDto;
+import com.schoolsystem.dto.Responses.RosterEntryDto;
+import com.schoolsystem.dto.Responses.ScheduleDto;
+import com.schoolsystem.dto.Responses.SectionDto;
+import com.schoolsystem.dto.Responses.SubjectDto;
+import com.schoolsystem.entity.Account;
+import com.schoolsystem.entity.Admin;
+import com.schoolsystem.entity.Announcement;
+import com.schoolsystem.entity.Balance;
+import com.schoolsystem.entity.Course;
+import com.schoolsystem.entity.Enrollment;
+import com.schoolsystem.entity.Faculty;
+import com.schoolsystem.entity.Grade;
+import com.schoolsystem.entity.Payment;
+import com.schoolsystem.entity.QuarterlySchedule;
+import com.schoolsystem.entity.Room;
+import com.schoolsystem.entity.Schedule;
+import com.schoolsystem.entity.Section;
+import com.schoolsystem.entity.Student;
+import com.schoolsystem.entity.Subject;
+import com.schoolsystem.service.GradeService;
+
+import java.util.List;
+
+/**
+ * Entity to DTO conversion. Called from the controllers, where the lazy relations
+ * can still be loaded (the JPA session stays open for the whole request).
+ */
+public final class DtoMapper {
+
+    private DtoMapper() {}
+
+    public static AccountDto account(Account a) {
+        String studentNumber = null, course = null, employeeNumber = null, department = null, position = null;
+        Integer yearLevel = null;
+        Boolean enrollmentConfirmed = null, hasPendingBalance = null;
+        com.schoolsystem.entity.enums.AdmissionStatus admissionStatus = null;
+
+        if (a instanceof Student s) {
+            studentNumber = s.getStudentNumber();
+            course = s.getCourse();
+            yearLevel = s.getYearLevel();
+            enrollmentConfirmed = s.isEnrollmentConfirmed();
+            hasPendingBalance = s.isHasPendingBalance();
+            admissionStatus = s.getAdmissionStatus();
+        } else if (a instanceof Faculty f) {
+            employeeNumber = f.getEmployeeNumber();
+            department = f.getDepartment();
+            position = f.getPosition();
+        } else if (a instanceof Admin ad) {
+            employeeNumber = ad.getEmployeeNumber();
+        }
+
+        return new AccountDto(a.getId(), a.getName(), a.getEmail(), a.getContactNumber(), a.getUserType(),
+                studentNumber, course, yearLevel, enrollmentConfirmed, hasPendingBalance,
+                employeeNumber, department, position, admissionStatus);
+    }
+
+    public static Responses.StudentDto student(Student s) {
+        return new Responses.StudentDto(
+                s.getId(),
+                s.getName(),
+                s.getEmail(),
+                s.getContactNumber(),
+                s.getUserType(),
+                s.getStudentNumber(),
+                s.getApplicationNumber(),
+                s.getCourse(),
+                s.getYearLevel(),
+                s.getAdmissionStatus(),
+                s.isEnrollmentConfirmed(),
+                s.isHasPendingBalance(),
+                s.getDateOfBirth(),
+                s.getGender(),
+                s.getCivilStatus(),
+                s.getNationality(),
+                s.getAddress(),
+                s.getEmergencyContactName(),
+                s.getEmergencyContactRelationship(),
+                s.getEmergencyContactPhone(),
+                s.getPreviousSchool(),
+                s.getYearGraduated(),
+                s.getPreviousTrack(),
+                s.getRejectionReason(),
+                s.getSubmittedAt(),
+                s.getReviewedAt(),
+                s.getReviewedBy()
+        );
+    }
+
+    public static AnnouncementDto announcement(Announcement a) {
+        return new AnnouncementDto(a.getId(), a.getTitle(), a.getContent(), a.getCategory(),
+                a.getTargetAudience(), a.getPostedAt(), a.isArchived());
+    }
+
+    public static RoomDto room(Room r) {
+        return new RoomDto(r.getId(), r.getRoomName(), r.getCapacity(), r.getRoomType(), r.isActive());
+    }
+
+    public static ScheduleDto schedule(Schedule s) {
+        return new ScheduleDto(s.getId(), s.getDay(), s.getStartTime(), s.getEndTime(),
+                s.getRoom().getId(), s.getRoom().getRoomName());
+    }
+
+    public static SectionDto section(Section s) {
+        Faculty f = s.getFaculty();
+        return new SectionDto(s.getId(), s.getSectionCode(),
+                s.getSubject().getSubjectCode(), s.getSubject().getSubjectName(), s.getSubject().getUnits(),
+                f == null ? null : f.getId(), f == null ? null : f.getName(),
+                s.getSchedules().stream().map(DtoMapper::schedule).toList(),
+                s.getCapacity(), s.getCurrentCount(), s.getAvailableSlots(), s.isFull());
+    }
+
+    public static SubjectDto subject(Subject s) {
+        return new SubjectDto(s.getId(), s.getSubjectCode(), s.getSubjectName(), s.getUnits(),
+                s.getYearLevel(), s.getSemester(), s.getCourse(), List.copyOf(s.getPrerequisites()));
+    }
+
+    public static CourseDto course(Course c) {
+        return new CourseDto(c.getId(), c.getCode(), c.getName(), c.getSectionPrefix());
+    }
+
+    public static EnrollmentDto enrollment(Enrollment e) {
+        return new EnrollmentDto(e.getId(), e.getStudent().getId(),
+                e.getSubject().getSubjectCode(), e.getSubject().getSubjectName(), e.getSubject().getUnits(),
+                e.getSection().getId(), e.getSection().getSectionCode(),
+                e.getSemester(), e.getSchoolYear(), e.getStatus(), e.getEnrolledAt());
+    }
+
+    public static CartItemDto cartItem(Section s) {
+        Faculty f = s.getFaculty();
+        return new CartItemDto(s.getId(), s.getSectionCode(),
+                s.getSubject().getSubjectCode(), s.getSubject().getSubjectName(), s.getSubject().getUnits(),
+                s.getSchedules().stream().map(DtoMapper::schedule).toList(),
+                f != null ? f.getName() : "TBA");
+    }
+
+    public static QuarterlyScheduleDto quarter(QuarterlySchedule q) {
+        return new QuarterlyScheduleDto(q.getId(), q.getQuarter(), q.getScheduledAmount(),
+                q.getPaidAmount(), q.getRemainingAmount(), q.getStatus());
+    }
+
+    public static BalanceDto balance(Balance b, List<QuarterlySchedule> quarters) {
+        return new BalanceDto(b.getId(), b.getSchoolYear(), b.getSemester(), b.getPaymentPlan(),
+                b.getTotalCost(), b.isDownpaymentPaid(), b.getRemainingBalance(), b.isDiscountApplied(),
+                quarters.stream().map(DtoMapper::quarter).toList());
+    }
+
+    public static PaymentDto payment(Payment p) {
+        return new PaymentDto(p.getId(), p.getSchoolYear(), p.getSemester(), p.getType(), p.getQuarter(),
+                p.getAmount(), p.getPaymentMethod(), p.getPaidAt());
+    }
+
+    public static GradeDto grade(Grade g) {
+        return new GradeDto(g.getId(), g.getStudent().getId(), g.getStudent().getName(),
+                g.getSection().getId(), g.getSection().getSectionCode(),
+                g.getSubject().getSubjectCode(), g.getSubject().getSubjectName(),
+                g.getSemester(), g.getSchoolYear(),
+                g.getPrelimGrade(), g.getMidtermGrade(), g.getPreFinalGrade(), g.getFinalGrade(),
+                g.getComputedMidterm(), g.getComputedFinal(), g.getOverallGrade(),
+                GradeService.getRemarks(g.getOverallGrade()), g.getSubmittedAt());
+    }
+
+    public static RosterEntryDto rosterEntry(GradeService.RosterEntry r) {
+        Student s = r.enrollment().getStudent();
+        return new RosterEntryDto(s.getId(), s.getStudentNumber(), s.getName(),
+                r.enrollment().getStatus(), r.grade() == null ? null : grade(r.grade()));
+    }
+}
