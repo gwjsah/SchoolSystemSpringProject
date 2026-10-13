@@ -100,7 +100,8 @@ public class DatabasePopulatorService {
                 "BSIT", new String[]{"Bachelor of Science in Information Technology", "IT-G"},
                 "BSCS", new String[]{"Bachelor of Science in Computer Science", "CS-F"},
                 "BSIS", new String[]{"Bachelor of Science in Information Systems", "IS-A"},
-                "BSCpE", new String[]{"Bachelor of Science in Computer Engineering", "CpE-E"}
+                "BSCpE", new String[]{"Bachelor of Science in Computer Engineering", "CpE-E"},
+                "GEN", new String[]{"General Education Department", "GEN-G"}
         );
 
         for (Map.Entry<String, String[]> entry : courses.entrySet()) {
@@ -159,27 +160,27 @@ public class DatabasePopulatorService {
         // Year 1 - Sem 1
         catalog.add(new SeedSubject("CSIT111", "Introduction to Computing", 3, 1, Semester.FIRST, "BSIT", List.of()));
         catalog.add(new SeedSubject("CSIT121", "Fundamentals of Programming", 3, 1, Semester.FIRST, "BSIT", List.of()));
-        catalog.add(new SeedSubject("MATH031", "Mathematics in the Modern World", 3, 1, Semester.FIRST, "BSIT", List.of()));
-        catalog.add(new SeedSubject("ENGL031", "Purposive Communication", 3, 1, Semester.FIRST, "BSIT", List.of()));
-        catalog.add(new SeedSubject("PHILO031", "Ethics", 3, 1, Semester.FIRST, "BSIT", List.of()));
-        catalog.add(new SeedSubject("NSTP101", "National Service Training Program 1", 3, 1, Semester.FIRST, "BSIT", List.of()));
-        catalog.add(new SeedSubject("PE101", "Physical Fitness and Wellness", 2, 1, Semester.FIRST, "BSIT", List.of()));
+        catalog.add(new SeedSubject("MATH031", "Mathematics in the Modern World", 3, 1, Semester.FIRST, "GEN", List.of()));
+        catalog.add(new SeedSubject("ENGL031", "Purposive Communication", 3, 1, Semester.FIRST, "GEN", List.of()));
+        catalog.add(new SeedSubject("PHILO031", "Ethics", 3, 1, Semester.FIRST, "GEN", List.of()));
+        catalog.add(new SeedSubject("NSTP101", "National Service Training Program 1", 3, 1, Semester.FIRST, "GEN", List.of()));
+        catalog.add(new SeedSubject("PE101", "Physical Fitness and Wellness", 2, 1, Semester.FIRST, "GEN", List.of()));
 
         // Year 1 - Sem 2
         catalog.add(new SeedSubject("CS132", "Introduction to Computer Systems", 3, 1, Semester.SECOND, "BSIT", List.of("CSIT111")));
         catalog.add(new SeedSubject("CSIT122", "Intermediate Programming", 3, 1, Semester.SECOND, "BSIT", List.of("CSIT121")));
         catalog.add(new SeedSubject("CSIT123", "Discrete Mathematics for IT", 3, 1, Semester.SECOND, "BSIT", List.of("MATH031")));
-        catalog.add(new SeedSubject("HIST031", "Readings in Philippine History", 3, 1, Semester.SECOND, "BSIT", List.of()));
-        catalog.add(new SeedSubject("NSTP102", "National Service Training Program 2", 3, 1, Semester.SECOND, "BSIT", List.of("NSTP101")));
-        catalog.add(new SeedSubject("PE102", "Rhythmic Activities and Dance", 2, 1, Semester.SECOND, "BSIT", List.of("PE101")));
+        catalog.add(new SeedSubject("HIST031", "Readings in Philippine History", 3, 1, Semester.SECOND, "GEN", List.of()));
+        catalog.add(new SeedSubject("NSTP102", "National Service Training Program 2", 3, 1, Semester.SECOND, "GEN", List.of("NSTP101")));
+        catalog.add(new SeedSubject("PE102", "Rhythmic Activities and Dance", 2, 1, Semester.SECOND, "GEN", List.of("PE101")));
 
         // Year 2 - Sem 1
         catalog.add(new SeedSubject("CSIT221", "Data Structures and Algorithms", 3, 2, Semester.FIRST, "BSIT", List.of("CSIT122")));
         catalog.add(new SeedSubject("CSIT227", "Object-Oriented Programming 1", 3, 2, Semester.FIRST, "BSIT", List.of("CSIT122")));
         catalog.add(new SeedSubject("IT211", "Computer Systems Architecture", 3, 2, Semester.FIRST, "BSIT", List.of("CS132")));
         catalog.add(new SeedSubject("IT212", "Platform Technologies", 3, 2, Semester.FIRST, "BSIT", List.of()));
-        catalog.add(new SeedSubject("MATH032", "Quantitative Methods and Statistics", 3, 2, Semester.FIRST, "BSIT", List.of("MATH031")));
-        catalog.add(new SeedSubject("PE201", "Individual and Dual Sports", 2, 2, Semester.FIRST, "BSIT", List.of("PE102")));
+        catalog.add(new SeedSubject("MATH032", "Quantitative Methods and Statistics", 3, 2, Semester.FIRST, "GEN", List.of("MATH031")));
+        catalog.add(new SeedSubject("PE201", "Individual and Dual Sports", 2, 2, Semester.FIRST, "GEN", List.of("PE102")));
 
         // Year 2 - Sem 2
         catalog.add(new SeedSubject("CSIT226", "Information Management 1", 3, 2, Semester.SECOND, "BSIT", List.of("CSIT221")));
@@ -187,7 +188,7 @@ public class DatabasePopulatorService {
         catalog.add(new SeedSubject("IT221", "Networking 1 - LAN Fundamentals", 3, 2, Semester.SECOND, "BSIT", List.of("IT211")));
         catalog.add(new SeedSubject("IT222", "Web Systems and Technologies 1", 3, 2, Semester.SECOND, "BSIT", List.of("CSIT227")));
         catalog.add(new SeedSubject("IT223", "Human-Computer Interaction", 3, 2, Semester.SECOND, "BSIT", List.of()));
-        catalog.add(new SeedSubject("PE202", "Team Sports", 2, 2, Semester.SECOND, "BSIT", List.of("PE201")));
+        catalog.add(new SeedSubject("PE202", "Team Sports", 2, 2, Semester.SECOND, "GEN", List.of("PE201")));
 
         // Year 3 - Sem 1
         catalog.add(new SeedSubject("CSIT321", "Applications Development and Emerging Tech", 3, 3, Semester.FIRST, "BSIT", List.of("IT222")));
@@ -220,27 +221,27 @@ public class DatabasePopulatorService {
         // Year 1 - Sem 1
         catalog.add(new SeedSubject("CS111", "Introduction to Computer Science", 3, 1, Semester.FIRST, "BSCS", List.of()));
         catalog.add(new SeedSubject("CS112", "Fundamentals of Programming (C/C++)", 3, 1, Semester.FIRST, "BSCS", List.of()));
-        catalog.add(new SeedSubject("MATH111", "Differential Calculus for Computing", 3, 1, Semester.FIRST, "BSCS", List.of()));
-        catalog.add(new SeedSubject("ENGL111", "Purposive Communication for STEM", 3, 1, Semester.FIRST, "BSCS", List.of()));
-        catalog.add(new SeedSubject("PHILO111", "Logic and Critical Thinking", 3, 1, Semester.FIRST, "BSCS", List.of()));
-        catalog.add(new SeedSubject("NSTP101-CS", "National Service Training Program 1", 3, 1, Semester.FIRST, "BSCS", List.of()));
-        catalog.add(new SeedSubject("PE101-CS", "Physical Fitness and Wellness", 2, 1, Semester.FIRST, "BSCS", List.of()));
+        catalog.add(new SeedSubject("MATH111", "Differential Calculus for Computing", 3, 1, Semester.FIRST, "GEN", List.of()));
+        catalog.add(new SeedSubject("ENGL111", "Purposive Communication for STEM", 3, 1, Semester.FIRST, "GEN", List.of()));
+        catalog.add(new SeedSubject("PHILO111", "Logic and Critical Thinking", 3, 1, Semester.FIRST, "GEN", List.of()));
+        catalog.add(new SeedSubject("NSTP101-CS", "National Service Training Program 1", 3, 1, Semester.FIRST, "GEN", List.of()));
+        catalog.add(new SeedSubject("PE101-CS", "Physical Fitness and Wellness", 2, 1, Semester.FIRST, "GEN", List.of()));
 
         // Year 1 - Sem 2
         catalog.add(new SeedSubject("CS121", "Object-Oriented Programming (Java)", 3, 1, Semester.SECOND, "BSCS", List.of("CS112")));
         catalog.add(new SeedSubject("CS122", "Discrete Mathematics and Graph Theory", 3, 1, Semester.SECOND, "BSCS", List.of("MATH111")));
         catalog.add(new SeedSubject("CS123", "Computer Organization and Assembly", 3, 1, Semester.SECOND, "BSCS", List.of("CS111")));
-        catalog.add(new SeedSubject("MATH121", "Integral Calculus and Linear Algebra", 3, 1, Semester.SECOND, "BSCS", List.of("MATH111")));
-        catalog.add(new SeedSubject("STS121", "Science, Technology, and Society", 3, 1, Semester.SECOND, "BSCS", List.of()));
-        catalog.add(new SeedSubject("PE102-CS", "Rhythmic Activities and Dance", 2, 1, Semester.SECOND, "BSCS", List.of("PE101-CS")));
+        catalog.add(new SeedSubject("MATH121", "Integral Calculus and Linear Algebra", 3, 1, Semester.SECOND, "GEN", List.of("MATH111")));
+        catalog.add(new SeedSubject("STS121", "Science, Technology, and Society", 3, 1, Semester.SECOND, "GEN", List.of()));
+        catalog.add(new SeedSubject("PE102-CS", "Rhythmic Activities and Dance", 2, 1, Semester.SECOND, "GEN", List.of("PE101-CS")));
 
         // Year 2 - Sem 1
         catalog.add(new SeedSubject("CS211", "Data Structures and Algorithm Analysis", 3, 2, Semester.FIRST, "BSCS", List.of("CS121")));
         catalog.add(new SeedSubject("CS212", "Design and Analysis of Algorithms", 3, 2, Semester.FIRST, "BSCS", List.of("CS122")));
         catalog.add(new SeedSubject("CS213", "Database Systems and Management", 3, 2, Semester.FIRST, "BSCS", List.of("CS121")));
         catalog.add(new SeedSubject("CS214", "Theory of Computation and Automata", 3, 2, Semester.FIRST, "BSCS", List.of("CS122")));
-        catalog.add(new SeedSubject("STAT211", "Probability and Statistics for CS", 3, 2, Semester.FIRST, "BSCS", List.of("MATH121")));
-        catalog.add(new SeedSubject("PE201-CS", "Individual and Dual Sports", 2, 2, Semester.FIRST, "BSCS", List.of("PE102-CS")));
+        catalog.add(new SeedSubject("STAT211", "Probability and Statistics for CS", 3, 2, Semester.FIRST, "GEN", List.of("MATH121")));
+        catalog.add(new SeedSubject("PE201-CS", "Individual and Dual Sports", 2, 2, Semester.FIRST, "GEN", List.of("PE102-CS")));
 
         // Year 2 - Sem 2
         catalog.add(new SeedSubject("CS221", "Operating Systems Architecture", 3, 2, Semester.SECOND, "BSCS", List.of("CS123")));
@@ -248,7 +249,7 @@ public class DatabasePopulatorService {
         catalog.add(new SeedSubject("CS223", "Computer Networks and Distributed Systems", 3, 2, Semester.SECOND, "BSCS", List.of("CS221")));
         catalog.add(new SeedSubject("CS224", "Software Engineering 1", 3, 2, Semester.SECOND, "BSCS", List.of("CS211")));
         catalog.add(new SeedSubject("CS225", "Full-Stack Web Development", 3, 2, Semester.SECOND, "BSCS", List.of("CS213")));
-        catalog.add(new SeedSubject("PE202-CS", "Team Sports", 2, 2, Semester.SECOND, "BSCS", List.of("PE201-CS")));
+        catalog.add(new SeedSubject("PE202-CS", "Team Sports", 2, 2, Semester.SECOND, "GEN", List.of("PE201-CS")));
 
         // Year 3 - Sem 1
         catalog.add(new SeedSubject("CS311", "Artificial Intelligence and Knowledge Systems", 3, 3, Semester.FIRST, "BSCS", List.of("CS212")));

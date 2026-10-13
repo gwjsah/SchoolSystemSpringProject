@@ -13,13 +13,13 @@ Move the old JavaFX + json-server school management project to a **Spring Boot +
 | JPA entities (19) | Done |
 | Repositories (18) | Done |
 | Services with the old business rules (8) | Done, with 5 fixes to the old logic (see 5) |
-| Import of the old `db.json` into MySQL | Done, confirmed by you |
+| Import of the old `db.json` into MySQL | Reset / Cleaned by user. Instructions defined in `DATABASE_POPULATION_GUIDE.md` |
 | Project builds and runs | Confirmed by you (before the controllers were added) |
 | JWT security, DTOs, controllers | Written, **working and tested** |
 | Postman collection (42 requests) | Provided, tested working |
 | Repo split into `backend/` and `frontend/` folders | Done (October 11) |
 | React frontend: foundation (login, auth, role layout, routing) | Done, builds and logs in against the real backend |
-| React frontend: feature screens | Not started (placeholder page on every route) |
+| React frontend: feature screens | Done (Student, Faculty, Admin feature pages built and connected) |
 | Automated tests | None yet |
 
 Nothing was compiled on my side. Compile and runtime issues are found on your machine, so the newest layer (controllers and security) is the most likely place for small errors.
@@ -235,9 +235,9 @@ The old code had no service classes for these, so they were left out. Tell me wh
 
 - [x] Vite + React project, React Router, Axios with the token attached to every request, redirect to login on 401
 - [x] Login page (modern rectangular 60/40 split with Apply/Admissions section on left and Sign In on right) and role-based layout
-- [x] Student: announcements, enrollment flow (eligibility, subjects, sections, cart, confirm), balance and payments, grades, drop subjects, weekly class schedule timetable
+- [x] Student: announcements, enrollment flow (eligibility referencing database `course` column: matches student program or `GEN` for open enrollment), balance and payments, grades, drop subjects, weekly class schedule timetable
 - [x] Faculty: Courses & sections management with top clickable course filter bar (All Courses + assigned course pills with section count badges), alphabetical course name sorting (A–Z / Z–A), section sorting (A–Z / Z–A), student roster & period grade entry (Prelim, Midterm, Pre-Final, Final), and weekly teaching schedule timetable
-- [x] Admin: announcements, rooms (unique validation & building filters), academic subjects & curriculum management (catalog search, degree/year/term filters, CRUD modals, prerequisites manager, and catalog data populator), class schedules & sections (unified Room Timetable with drag & shift-selection section assignment, individual schedule slot removal, multi-day lecture/lab sessions, conflict checks, All Sections Directory view, in-modal error feedback, section force-delete support, and conflict-free schedule seed script `populate_schedules.sql`), admissions review & student management
+- [x] Admin: announcements, rooms (unique validation & building filters), academic subjects & curriculum management (catalog search, degree/year/term filters strictly driven by DB `course` values, CRUD modals, prerequisites manager, and catalog data populator), class schedules & sections (unified Room Timetable with drag & shift-selection section assignment, individual schedule slot removal, multi-day lecture/lab sessions, conflict checks, All Sections Directory view, in-modal error feedback, section force-delete support, and conflict-free schedule seed script `populate_schedules.sql`), admissions review & student management
 - [ ] Screens for the missing backend features above, once their endpoints exist
 - [ ] Match the old JavaFX design (screenshots or a list of what each role could do will help)
 
