@@ -165,4 +165,37 @@ public final class Requests {
             @NotBlank(message = "Department cannot be empty") String department,
             @NotBlank(message = "Position cannot be empty") String position,
             String password) {}
+
+    public record OpenEnrollmentPeriodRequest(
+            @NotNull(message = "Semester is required") com.schoolsystem.entity.enums.Semester semester,
+            @NotBlank(message = "School year is required") String schoolYear,
+            @NotNull(message = "Start date/time is required") java.time.LocalDateTime startsAt,
+            @NotNull(message = "End date/time is required") java.time.LocalDateTime endsAt) {}
+
+    public record OpenGradingPeriodRequest(
+            @NotNull(message = "Semester is required") com.schoolsystem.entity.enums.Semester semester,
+            @NotBlank(message = "School year is required") String schoolYear,
+            java.time.LocalDateTime deadline) {}
+
+    public record OpenEvaluationPeriodRequest(
+            @NotNull(message = "Semester is required") com.schoolsystem.entity.enums.Semester semester,
+            @NotBlank(message = "School year is required") String schoolYear,
+            @NotNull(message = "Start date/time is required") java.time.LocalDateTime startsAt,
+            @NotNull(message = "End date/time is required") java.time.LocalDateTime endsAt) {}
+
+    public record OpenAdmissionPeriodRequest(
+            @NotNull(message = "Semester is required") com.schoolsystem.entity.enums.Semester semester,
+            @NotBlank(message = "School year is required") String schoolYear,
+            @NotNull(message = "Start date/time is required") java.time.LocalDateTime startsAt,
+            @NotNull(message = "End date/time is required") java.time.LocalDateTime endsAt) {}
+
+    public record SubmitFacultyEvaluationRequest(
+            @NotBlank(message = "Faculty ID is required") String facultyId,
+            @NotBlank(message = "Section ID is required") String sectionId,
+            @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(5) int teachingEffectiveness,
+            @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(5) int subjectKnowledge,
+            @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(5) int communication,
+            @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(5) int professionalism,
+            @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(5) int studentEngagement,
+            String comments) {}
 }

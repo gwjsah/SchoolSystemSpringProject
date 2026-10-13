@@ -8,6 +8,7 @@ import com.schoolsystem.entity.Room;
 import com.schoolsystem.entity.Schedule;
 import com.schoolsystem.entity.Section;
 import com.schoolsystem.entity.Subject;
+import com.schoolsystem.repository.CartItemRepository;
 import com.schoolsystem.repository.CourseRepository;
 import com.schoolsystem.repository.EnrollmentRepository;
 import com.schoolsystem.repository.FacultyRepository;
@@ -40,6 +41,7 @@ public class SectionService {
     private final EnrollmentRepository enrollmentRepository;
     private final GradeRepository gradeRepository;
     private final FacultyEvaluationRepository facultyEvaluationRepository;
+    private final CartItemRepository cartItemRepository;
 
     /** One day/time slot sent from the UI. */
     public record ScheduleSlot(Schedule.Day day, LocalTime startTime, LocalTime endTime, String roomId) {}
@@ -146,7 +148,11 @@ public class SectionService {
             if (enrollmentRepository.existsBySection_Id(sectionId))
                 throw new IllegalStateException(
                         "Cannot delete section — it still has enrollment records. Enable 'Force delete' to remove records.");
+            if (cartItemRepository.existsBySection_Id(sectionId))
+                throw new IllegalStateException(
+                        "Cannot delete section — it is currently selected in student cart(s). Enable 'Force delete' to remove.");
         } else {
+            cartItemRepository.deleteBySection_Id(sectionId);
             gradeRepository.deleteBySection_Id(sectionId);
             facultyEvaluationRepository.deleteBySection_Id(sectionId);
             enrollmentRepository.deleteBySection_Id(sectionId);

@@ -1,12 +1,17 @@
 package com.schoolsystem.dto;
 
 import com.schoolsystem.dto.Responses.AccountDto;
+import com.schoolsystem.dto.Responses.AdmissionPeriodDto;
 import com.schoolsystem.dto.Responses.AnnouncementDto;
 import com.schoolsystem.dto.Responses.BalanceDto;
 import com.schoolsystem.dto.Responses.CartItemDto;
 import com.schoolsystem.dto.Responses.CourseDto;
 import com.schoolsystem.dto.Responses.EnrollmentDto;
+import com.schoolsystem.dto.Responses.EnrollmentPeriodDto;
+import com.schoolsystem.dto.Responses.EvaluationPeriodDto;
+import com.schoolsystem.dto.Responses.FacultyEvaluationDto;
 import com.schoolsystem.dto.Responses.GradeDto;
+import com.schoolsystem.dto.Responses.GradingPeriodDto;
 import com.schoolsystem.dto.Responses.PaymentDto;
 import com.schoolsystem.dto.Responses.QuarterlyScheduleDto;
 import com.schoolsystem.dto.Responses.RoomDto;
@@ -16,12 +21,17 @@ import com.schoolsystem.dto.Responses.SectionDto;
 import com.schoolsystem.dto.Responses.SubjectDto;
 import com.schoolsystem.entity.Account;
 import com.schoolsystem.entity.Admin;
+import com.schoolsystem.entity.AdmissionPeriod;
 import com.schoolsystem.entity.Announcement;
 import com.schoolsystem.entity.Balance;
 import com.schoolsystem.entity.Course;
 import com.schoolsystem.entity.Enrollment;
+import com.schoolsystem.entity.EnrollmentPeriod;
+import com.schoolsystem.entity.EvaluationPeriod;
 import com.schoolsystem.entity.Faculty;
+import com.schoolsystem.entity.FacultyEvaluation;
 import com.schoolsystem.entity.Grade;
+import com.schoolsystem.entity.GradingPeriod;
 import com.schoolsystem.entity.Payment;
 import com.schoolsystem.entity.QuarterlySchedule;
 import com.schoolsystem.entity.Room;
@@ -180,5 +190,57 @@ public final class DtoMapper {
         Student s = r.enrollment().getStudent();
         return new RosterEntryDto(s.getId(), s.getStudentNumber(), s.getName(),
                 r.enrollment().getStatus(), r.grade() == null ? null : grade(r.grade()));
+    }
+
+    public static EnrollmentPeriodDto enrollmentPeriod(EnrollmentPeriod p) {
+        if (p == null) return null;
+        return new EnrollmentPeriodDto(
+                p.getId(), p.getSemester(), p.getSchoolYear(),
+                p.getStartsAt(), p.getEndsAt(), p.isOpen());
+    }
+
+    public static GradingPeriodDto gradingPeriod(GradingPeriod p) {
+        if (p == null) return null;
+        return new GradingPeriodDto(
+                p.getId(), p.getSemester(), p.getSchoolYear(),
+                p.getDeadline(), p.isOpen());
+    }
+
+    public static EvaluationPeriodDto evaluationPeriod(EvaluationPeriod p) {
+        if (p == null) return null;
+        return new EvaluationPeriodDto(
+                p.getId(), p.getSemester(), p.getSchoolYear(),
+                p.getStartsAt(), p.getEndsAt(), p.isOpen());
+    }
+
+    public static AdmissionPeriodDto admissionPeriod(AdmissionPeriod p) {
+        if (p == null) return null;
+        return new AdmissionPeriodDto(
+                p.getId(), p.getSemester(), p.getSchoolYear(),
+                p.getStartsAt(), p.getEndsAt(), p.isOpen());
+    }
+
+    public static FacultyEvaluationDto facultyEvaluation(FacultyEvaluation fe) {
+        if (fe == null) return null;
+        return new FacultyEvaluationDto(
+                fe.getId(),
+                fe.getStudent() != null ? fe.getStudent().getId() : null,
+                fe.getStudent() != null ? fe.getStudent().getName() : null,
+                fe.getStudent() != null ? fe.getStudent().getStudentNumber() : null,
+                fe.getFaculty() != null ? fe.getFaculty().getId() : null,
+                fe.getFaculty() != null ? fe.getFaculty().getName() : null,
+                fe.getSection() != null ? fe.getSection().getId() : null,
+                fe.getSection() != null ? fe.getSection().getSectionCode() : null,
+                fe.getSection() != null && fe.getSection().getSubject() != null ? fe.getSection().getSubject().getSubjectCode() : null,
+                fe.getSection() != null && fe.getSection().getSubject() != null ? fe.getSection().getSubject().getSubjectName() : null,
+                fe.getSemester(),
+                fe.getSchoolYear(),
+                fe.getTeachingEffectiveness(),
+                fe.getSubjectKnowledge(),
+                fe.getCommunication(),
+                fe.getProfessionalism(),
+                fe.getStudentEngagement(),
+                fe.getAverageScore(),
+                fe.getComments());
     }
 }

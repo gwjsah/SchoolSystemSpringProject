@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 
 /** Response bodies the API returns. Passwords are never included. */
 public final class Responses {
@@ -127,4 +128,94 @@ public final class Responses {
             String position,
             List<SubjectDto> assignedSubjects,
             List<SectionDto> sections) {}
+
+    public record EnrollmentPeriodDto(
+            String id,
+            Semester semester,
+            String schoolYear,
+            LocalDateTime startsAt,
+            LocalDateTime endsAt,
+            @JsonProperty("isOpen") boolean isOpen) {}
+
+    public record GradingPeriodDto(
+            String id,
+            Semester semester,
+            String schoolYear,
+            LocalDateTime deadline,
+            @JsonProperty("isOpen") boolean isOpen) {}
+
+    public record EvaluationPeriodDto(
+            String id,
+            Semester semester,
+            String schoolYear,
+            LocalDateTime startsAt,
+            LocalDateTime endsAt,
+            @JsonProperty("isOpen") boolean isOpen) {}
+
+    public record AdmissionPeriodDto(
+            String id,
+            Semester semester,
+            String schoolYear,
+            LocalDateTime startsAt,
+            LocalDateTime endsAt,
+            @JsonProperty("isOpen") boolean isOpen) {}
+
+    public record AcademicPeriodsStatusDto(
+            EnrollmentPeriodDto activeEnrollmentPeriod,
+            GradingPeriodDto activeGradingPeriod,
+            EvaluationPeriodDto activeEvaluationPeriod,
+            AdmissionPeriodDto activeAdmissionPeriod) {}
+
+    public record FacultyEvaluationDto(
+            String id,
+            String studentId,
+            String studentName,
+            String studentNumber,
+            String facultyId,
+            String facultyName,
+            String sectionId,
+            String sectionCode,
+            String subjectCode,
+            String subjectName,
+            Semester semester,
+            String schoolYear,
+            int teachingEffectiveness,
+            int subjectKnowledge,
+            int communication,
+            int professionalism,
+            int studentEngagement,
+            double averageScore,
+            String comments) {}
+
+    public record StudentTeacherToEvaluateDto(
+            String facultyId,
+            String facultyName,
+            String email,
+            String department,
+            String position,
+            String employeeNumber,
+            String sectionId,
+            String sectionCode,
+            String subjectCode,
+            String subjectName,
+            Semester semester,
+            String schoolYear,
+            boolean isEvaluated,
+            FacultyEvaluationDto evaluation) {}
+
+    public record FacultyEvaluationSummaryDto(
+            String facultyId,
+            String facultyName,
+            String employeeNumber,
+            String department,
+            String position,
+            int totalEvaluations,
+            double overallAverage,
+            double averageTeachingEffectiveness,
+            double averageSubjectKnowledge,
+            double averageCommunication,
+            double averageProfessionalism,
+            double averageStudentEngagement,
+            Map<Integer, Long> scoreDistribution,
+            List<FacultyEvaluationDto> evaluations) {}
 }

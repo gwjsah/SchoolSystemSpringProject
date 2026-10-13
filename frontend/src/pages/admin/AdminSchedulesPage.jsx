@@ -1159,7 +1159,7 @@ export default function AdminSchedulesPage() {
       {selectedSection && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-900/40 dark:bg-black/70"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             onClick={() => setSelectedSection(null)}
           />
           <div className="relative w-full max-w-lg rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xl text-slate-900 dark:text-slate-100">
@@ -1273,7 +1273,7 @@ export default function AdminSchedulesPage() {
       {sectionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-900/40 dark:bg-black/70"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             onClick={() => !submitting && setSectionModalOpen(false)}
           />
           <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xl text-slate-900 dark:text-slate-100">
@@ -1570,7 +1570,7 @@ export default function AdminSchedulesPage() {
       {slotDeleteTarget && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-900/40 dark:bg-black/60"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             onClick={() => !deletingSlot && setSlotDeleteTarget(null)}
           />
           <div className="relative w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl">

@@ -21,6 +21,7 @@ import {
 import api, { getErrorMessage } from '../api/client'
 import { Alert, Badge, Button, Card, Field, inputClass } from '../components/ui'
 import { ThemeToggle } from '../theme/ThemeContext'
+import { useApi } from '../hooks/useApi'
 
 export function deriveSchoolEmail(firstName, lastName) {
   const cleanFirst = (firstName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -34,6 +35,10 @@ export function deriveSchoolEmail(firstName, lastName) {
 export default function AdmissionApplyPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('apply') // 'apply' | 'status'
+
+  // Admission period status
+  const { data: periodStatus, loading: periodLoading } = useApi('/academic-periods/status')
+  const isAdmissionOpen = Boolean(periodStatus?.activeAdmissionPeriod?.isOpen)
 
   // Courses list
   const [courses, setCourses] = useState([])
@@ -115,7 +120,9 @@ export default function AdmissionApplyPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setApplyError('')
+    if (!periodLoading && !isAdmissionOpen) {
+      return setApplyError('Admission is currently closed. Online applications cannot be submitted at this time.')
+    }
 
     // Client validation
     if (!formData.firstName.trim()) return setApplyError('Please enter your first name.')
@@ -311,6 +318,15 @@ export default function AdmissionApplyPage() {
                     Please provide complete and accurate information. An administrator will review your application before issuing your official admission.
                   </p>
                 </div>
+
+                {!periodLoading && !isAdmissionOpen && (
+                  <Alert type="error">
+                    <div className="flex items-center gap-2">
+                      <Lock className="h-4 w-4 shrink-0" />
+                      <span>Admission is currently closed. Online applications are not being accepted at this time.</span>
+                    </div>
+                  </Alert>
+                )}
 
                 {applyError && (
                   <Alert type="error" onClose={() => setApplyError('')}>
@@ -668,7 +684,12 @@ export default function AdmissionApplyPage() {
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     By submitting, you certify that all information submitted is true, correct, and complete.
                   </p>
-                  <Button type="submit" loading={submitting} className="w-full sm:w-auto px-8">
+                  <Button
+                    type="submit"
+                    loading={submitting}
+                    disabled={!periodLoading && !isAdmissionOpen}
+                    className="w-full sm:w-auto px-8"
+                  >
                     <Send className="h-4 w-4 mr-2" />
                     Submit Application
                   </Button>

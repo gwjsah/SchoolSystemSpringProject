@@ -3,6 +3,7 @@ package com.schoolsystem.service;
 import com.schoolsystem.exception.NotFoundException;
 
 import com.schoolsystem.entity.Balance;
+import com.schoolsystem.entity.CartItem;
 import com.schoolsystem.entity.Enrollment;
 import com.schoolsystem.entity.EnrollmentPeriod;
 import com.schoolsystem.entity.QuarterlySchedule;
@@ -16,6 +17,7 @@ import com.schoolsystem.entity.enums.QuarterStatus;
 import com.schoolsystem.entity.enums.Semester;
 import com.schoolsystem.entity.enums.Status;
 import com.schoolsystem.repository.BalanceRepository;
+import com.schoolsystem.repository.CartItemRepository;
 import com.schoolsystem.repository.CompletedSubjectRepository;
 import com.schoolsystem.repository.EnrollmentPeriodRepository;
 import com.schoolsystem.repository.EnrollmentRepository;
@@ -30,11 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import static com.schoolsystem.service.BillingRules.COST_PER_UNIT;
@@ -54,11 +53,7 @@ public class EnrollmentService {
     private final CompletedSubjectRepository completedSubjectRepository;
     private final SectionRepository sectionRepository;
     private final StudentRepository studentRepository;
-
-    /** Selected-but-unconfirmed subjects. Held in memory per student, so a server restart clears them. */
-    public record CartItem(String sectionId, String subjectCode) {}
-
-    private final Map<String, List<CartItem>> carts = new ConcurrentHashMap<>();
+    private final CartItemRepository cartItemRepository;
 
     // ── GATE CHECK ──────────────────────────────────────────────────────────
 
@@ -141,23 +136,23 @@ public class EnrollmentService {
 
     // ── CART ────────────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     public List<CartItem> getCart(String studentId) {
-        return List.copyOf(carts.getOrDefault(studentId, List.of()));
+        return cartItemRepository.findByStudent_IdOrderByAddedAtAsc(studentId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public void addToCart(String studentId, String sectionId) {
         // The API can be called directly, so the gate and availability are checked here too.
         canEnroll(studentId);
 
+        Student student = loadStudent(studentId);
         Section section = sectionRepository.findById(sectionId)
                 .orElseThrow(() -> new NotFoundException("Section not found"));
         Subject subject = section.getSubject();
 
-        List<CartItem> cart = carts.computeIfAbsent(studentId, k -> new CopyOnWriteArrayList<>());
-
         // duplicate check
-        if (cart.stream().anyMatch(i -> i.subjectCode().equals(subject.getSubjectCode())))
+        if (cartItemRepository.existsByStudent_IdAndSubject_SubjectCode(studentId, subject.getSubjectCode()))
             throw new IllegalStateException("Subject already in cart");
 
         if (getAvailableSubjects(studentId).stream()
@@ -165,15 +160,15 @@ public class EnrollmentService {
             throw new IllegalArgumentException("Subject is not available for this student");
 
         // unit limit (enrolled/pending + cart + this one)
-        int cartUnits = cart.stream()
-                .mapToInt(i -> subjectRepository.findBySubjectCode(i.subjectCode())
-                        .map(Subject::getUnits).orElse(0))
+        List<CartItem> currentCart = cartItemRepository.findByStudent_IdOrderByAddedAtAsc(studentId);
+        int cartUnits = currentCart.stream()
+                .mapToInt(i -> i.getSubject().getUnits())
                 .sum();
         if (getCurrentUnits(studentId) + cartUnits + subject.getUnits() > MAX_UNITS)
             throw new IllegalStateException(
                     "Adding this subject exceeds the " + MAX_UNITS + " unit limit");
 
-        // section capacity
+        // section capacity: check slots and reserve (first come first served)
         if (section.isFull())
             throw new IllegalStateException("Section is already full");
 
@@ -185,24 +180,45 @@ public class EnrollmentService {
         if (overlaps(section, activeSections))
             throw new IllegalStateException("Schedule conflict with an existing enrollment");
 
-        List<Section> cartSections = cart.stream()
-                .map(i -> sectionRepository.findById(i.sectionId()))
-                .flatMap(Optional::stream)
+        List<Section> cartSections = currentCart.stream()
+                .map(CartItem::getSection)
                 .toList();
         if (overlaps(section, cartSections))
             throw new IllegalStateException("Schedule conflict with another selected subject");
 
-        cart.add(new CartItem(sectionId, subject.getSubjectCode()));
+        // Reserve the slot immediately
+        section.incrementCurrentCount();
+        sectionRepository.save(section);
+
+        CartItem cartItem = new CartItem(student, section, subject);
+        cartItemRepository.save(cartItem);
     }
 
+    @Transactional
     public void removeFromCart(String studentId, String subjectCode) {
-        List<CartItem> cart = carts.get(studentId);
-        if (cart != null)
-            cart.removeIf(i -> i.subjectCode().equals(subjectCode));
+        Optional<CartItem> opt = cartItemRepository.findByStudent_IdAndSubject_SubjectCode(studentId, subjectCode);
+        if (opt.isPresent()) {
+            CartItem item = opt.get();
+            Section section = item.getSection();
+            if (section.getCurrentCount() > 0) {
+                section.decrementCurrentCount();
+                sectionRepository.save(section);
+            }
+            cartItemRepository.delete(item);
+        }
     }
 
+    @Transactional
     public void clearCart(String studentId) {
-        carts.remove(studentId);
+        List<CartItem> items = cartItemRepository.findByStudent_IdOrderByAddedAtAsc(studentId);
+        for (CartItem item : items) {
+            Section section = item.getSection();
+            if (section.getCurrentCount() > 0) {
+                section.decrementCurrentCount();
+                sectionRepository.save(section);
+            }
+        }
+        cartItemRepository.deleteByStudent_Id(studentId);
     }
 
     // ── CONFIRM ENROLLMENT ──────────────────────────────────────────────────
@@ -217,14 +233,13 @@ public class EnrollmentService {
         canEnroll(studentId);
         EnrollmentPeriod period = getActivePeriod();
 
-        List<CartItem> cartItems = getCart(studentId);
+        List<CartItem> cartItems = cartItemRepository.findByStudent_IdOrderByAddedAtAsc(studentId);
         if (cartItems.isEmpty())
             throw new IllegalStateException("No subjects selected to confirm");
 
         BigDecimal totalCost = BigDecimal.ZERO;
         for (CartItem item : cartItems) {
-            Section section = sectionRepository.findById(item.sectionId())
-                    .orElseThrow(() -> new NotFoundException("Section not found"));
+            Section section = item.getSection();
             Subject subject = section.getSubject();
 
             Enrollment enrollment = new Enrollment();
@@ -236,7 +251,8 @@ public class EnrollmentService {
             enrollment.setStatus(Status.PENDING);
             enrollmentRepository.save(enrollment);
 
-            section.incrementCurrentCount(); // throws if full; @Version guards concurrent enrollments
+            // Note: section.incrementCurrentCount() is NOT called here because the slot was already
+            // reserved when the student added the section to the cart.
 
             totalCost = totalCost.add(COST_PER_UNIT.multiply(BigDecimal.valueOf(subject.getUnits())));
         }
@@ -262,7 +278,9 @@ public class EnrollmentService {
             createQuarterlySchedule(balance, remaining);
 
         student.setEnrollmentConfirmed(true);
-        clearCart(studentId);
+        // Clear the cart records from the database directly without releasing the reserved slots,
+        // because those slots are now officially enrolled/pending for this student.
+        cartItemRepository.deleteByStudent_Id(studentId);
         return balance;
     }
 
@@ -365,9 +383,8 @@ public class EnrollmentService {
 
     @Transactional(readOnly = true)
     public List<Section> getCartSections(String studentId) {
-        return getCart(studentId).stream()
-                .map(i -> sectionRepository.findById(i.sectionId()))
-                .flatMap(Optional::stream)
+        return cartItemRepository.findByStudent_IdOrderByAddedAtAsc(studentId).stream()
+                .map(CartItem::getSection)
                 .toList();
     }
 }

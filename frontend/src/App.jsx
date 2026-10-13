@@ -12,6 +12,7 @@ import MySubjectsPage from './pages/student/MySubjectsPage'
 import StudentSchedulePage from './pages/student/StudentSchedulePage'
 import PaymentsPage from './pages/student/PaymentsPage'
 import GradesPage from './pages/student/GradesPage'
+import FacultyEvaluationPage from './pages/student/FacultyEvaluationPage'
 import StudentPersonalInfoPage from './pages/student/StudentPersonalInfoPage'
 
 import FacultyDashboard from './pages/faculty/FacultyDashboard'
@@ -35,6 +36,7 @@ const STUDENT_COMPONENTS = {
   schedule: StudentSchedulePage,
   payments: PaymentsPage,
   grades: GradesPage,
+  'faculty-evaluation': FacultyEvaluationPage,
   'personal-info': StudentPersonalInfoPage,
 }
 

@@ -7,10 +7,14 @@ import {
   FileText,
   CreditCard,
   Award,
+  Lock,
+  AlertCircle,
 } from 'lucide-react'
 import { ThemeToggle } from '../theme/ThemeContext'
 import { ROLE_HOME, useAuth } from '../auth/AuthContext'
 import { getErrorMessage } from '../api/client'
+import { useApi } from '../hooks/useApi'
+import { formatTerm } from '../lib/format'
 
 export default function LoginPage() {
   const { user, login } = useAuth()
@@ -22,6 +26,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // Academic periods status for admission check
+  const { data: periodStatus, loading: periodLoading } = useApi('/academic-periods/status')
+  const activeAdmission = periodStatus?.activeAdmissionPeriod
+  const isAdmissionOpen = Boolean(activeAdmission?.isOpen)
 
   // Already logged in: skip the form.
   if (user) {
@@ -82,10 +91,24 @@ export default function LoginPage() {
             </div>
 
             {/* Admissions Banner */}
-            <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-              <span>Admissions & Enrollment Open for AY 2026–2027</span>
-            </div>
+            {periodLoading ? (
+              <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                <span>Checking admission status…</span>
+              </div>
+            ) : isAdmissionOpen ? (
+              <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>
+                  Admissions Open for {formatTerm(activeAdmission.semester, activeAdmission.schoolYear)}
+                </span>
+              </div>
+            ) : (
+              <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-rose-400/20 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                <span>Admissions Currently Closed</span>
+              </div>
+            )}
 
             {/* Admission Heading & Narrative */}
             <div className="mt-5">
@@ -117,19 +140,56 @@ export default function LoginPage() {
 
           {/* Action / Apply Button */}
           <div className="relative z-10 mt-8 pt-6 border-t border-white/10">
-            <div className="flex flex-wrap items-center gap-3">
-              <Link
-                to="/apply"
-                className="inline-flex items-center gap-2 rounded-xl bg-accent hover:bg-accent-hover px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-              >
-                <GraduationCap className="h-4 w-4" />
-                <span>Apply for Admission</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-              <span className="text-[11px] text-slate-400">
-                For incoming freshmen and transferees
-              </span>
-            </div>
+            {periodLoading ? (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-800/80 border border-slate-700/60 px-5 py-2.5 text-sm font-semibold text-slate-400 shadow-sm cursor-not-allowed opacity-75"
+                >
+                  <GraduationCap className="h-4 w-4" />
+                  <span>Checking status…</span>
+                </button>
+              </div>
+            ) : isAdmissionOpen ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  to="/apply"
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent hover:bg-accent-hover px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                >
+                  <GraduationCap className="h-4 w-4" />
+                  <span>Apply for Admission</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+                <span className="text-[11px] text-slate-400">
+                  For incoming freshmen and transferees
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    title="Admission is currently closed"
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-800/80 border border-slate-700/60 px-5 py-2.5 text-sm font-semibold text-slate-400 shadow-sm cursor-not-allowed opacity-75"
+                  >
+                    <Lock className="h-4 w-4 text-slate-400" />
+                    <span>Apply for Admission</span>
+                  </button>
+                  <span className="text-[11px] text-rose-300/80 font-medium">
+                    Admission period is closed
+                  </span>
+                </div>
+                {/* <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-200">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
+                  <p className="leading-relaxed">
+                    Admission is currently closed. Online applications are not being accepted at this time. Please check back when a new admission period opens.
+                  </p>
+                </div> */}
+              </div>
+            )}
           </div>
         </div>
 

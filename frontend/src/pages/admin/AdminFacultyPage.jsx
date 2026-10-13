@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
+  Award,
+  BarChart2,
   BookOpen,
   Calendar,
   Check,
@@ -12,10 +14,12 @@ import {
   GraduationCap,
   Mail,
   MapPin,
+  MessageSquare,
   Phone,
   Plus,
   RefreshCw,
   Search,
+  Star,
   Trash2,
   User,
   UserCheck,
@@ -145,6 +149,12 @@ export default function AdminFacultyPage() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+
+  // Student Evaluations Modal
+  const [evaluationsFaculty, setEvaluationsFaculty] = useState(null)
+  const [evaluationsSummary, setEvaluationsSummary] = useState(null)
+  const [evaluationsLoading, setEvaluationsLoading] = useState(false)
+  const [evaluationsError, setEvaluationsError] = useState('')
 
   // Form State for Create / Edit
   const [formData, setFormData] = useState({
@@ -277,6 +287,22 @@ export default function AdminFacultyPage() {
   const handleOpenView = (f, tab = 'TIMETABLE') => {
     setViewFaculty(f)
     setViewModalTab(tab)
+  }
+
+  // Open Student Evaluations Modal
+  const handleOpenEvaluations = async (f) => {
+    setEvaluationsFaculty(f)
+    setEvaluationsSummary(null)
+    setEvaluationsLoading(true)
+    setEvaluationsError('')
+    try {
+      const res = await api.get(`/admin/faculty/${f.id}/evaluations`)
+      setEvaluationsSummary(res.data)
+    } catch (err) {
+      setEvaluationsError(getErrorMessage(err))
+    } finally {
+      setEvaluationsLoading(false)
+    }
   }
 
   // Save Form (Create or Edit)
@@ -645,6 +671,16 @@ export default function AdminFacultyPage() {
                         title="View teacher information, timetable & sections"
                       >
                         <Eye className="h-3.5 w-3.5 mr-1" /> View
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleOpenEvaluations(f)}
+                        title="View student evaluation results, charts & feedback"
+                        className="text-amber-700 dark:text-amber-400 hover:text-amber-800"
+                      >
+                        <Award className="h-3.5 w-3.5 mr-1 text-amber-500" /> Evaluations
                       </Button>
 
                       <Button
@@ -1242,6 +1278,18 @@ export default function AdminFacultyPage() {
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="w-full sm:w-auto text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-amber-200 dark:border-amber-900/60"
+                  onClick={() => {
+                    const target = viewFaculty
+                    setViewFaculty(null)
+                    handleOpenEvaluations(target)
+                  }}
+                >
+                  <Award className="h-4 w-4 mr-1.5 text-amber-500" /> Student Evaluations
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   className="w-full sm:w-auto text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/60"
                   onClick={() => {
                     const target = viewFaculty
@@ -1677,6 +1725,281 @@ export default function AdminFacultyPage() {
           </div>
         )}
       </ConfirmDialog>
+
+      {/* ===================================================================== */}
+      {/* MODAL 5: FACULTY EVALUATIONS RESULTS MODAL                            */}
+      {/* ===================================================================== */}
+      {evaluationsFaculty && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-hidden">
+          <div className="relative w-full max-w-5xl h-[88vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl transition-colors overflow-hidden">
+            {/* Modal Header (Fixed at top) */}
+            <div className="shrink-0 flex items-start justify-between border-b border-slate-200 dark:border-slate-800 p-4 sm:p-6 pb-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent text-white font-bold text-base shadow-sm">
+                  {evaluationsFaculty.name?.slice(0, 2).toUpperCase() || 'FC'}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">
+                      {evaluationsFaculty.name}
+                    </h3>
+                    <Badge tone="accent" className="font-mono text-xs">
+                      {evaluationsFaculty.employeeNumber || 'FAC'}
+                    </Badge>
+                    {evaluationsSummary && (
+                      <Badge tone={evaluationsSummary.totalEvaluations > 0 ? 'green' : 'slate'}>
+                        {evaluationsSummary.totalEvaluations} {evaluationsSummary.totalEvaluations === 1 ? 'Evaluation' : 'Evaluations'}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {evaluationsFaculty.position || 'Faculty'}
+                    </span>{' '}
+                    · {evaluationsFaculty.department}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEvaluationsFaculty(null)}
+                className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Modal Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              {evaluationsLoading ? (
+                <LoadingState message="Loading student evaluations..." />
+              ) : evaluationsError ? (
+                <Alert type="error">{evaluationsError}</Alert>
+              ) : !evaluationsSummary || evaluationsSummary.totalEvaluations === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-12 text-center">
+                  <EmptyState icon={Award} title="No evaluations submitted">
+                    No student performance evaluations have been submitted for {evaluationsFaculty.name} yet.
+                  </EmptyState>
+                </div>
+              ) : (
+                <>
+                  {/* Top Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                      <div className="flex items-center gap-2 text-amber-500 mb-1">
+                        <Star className="h-4 w-4 fill-amber-500" />
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Overall Rating</span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-900 dark:text-white">
+                        {evaluationsSummary.overallAverage.toFixed(2)}
+                        <span className="text-xs text-slate-400 font-normal ml-1">/ 5.0</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                      <div className="flex items-center gap-2 text-accent mb-1">
+                        <Users className="h-4 w-4" />
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Student Reviews</span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-900 dark:text-white">
+                        {evaluationsSummary.totalEvaluations}
+                        <span className="text-xs text-slate-400 font-normal ml-1">responses</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                      <div className="flex items-center gap-2 text-indigo-500 mb-1">
+                        <BookOpen className="h-4 w-4" />
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Teaching Quality</span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-900 dark:text-white">
+                        {evaluationsSummary.averageTeachingEffectiveness.toFixed(2)}
+                        <span className="text-xs text-slate-400 font-normal ml-1">/ 5.0</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+                      <div className="flex items-center gap-2 text-emerald-500 mb-1">
+                        <GraduationCap className="h-4 w-4" />
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Subject Mastery</span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-900 dark:text-white">
+                        {evaluationsSummary.averageSubjectKnowledge.toFixed(2)}
+                        <span className="text-xs text-slate-400 font-normal ml-1">/ 5.0</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rating Breakdown & Distribution Chart */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Score Distribution Chart */}
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                          <BarChart2 className="h-4 w-4 text-accent" />
+                          <span>Rating Distribution</span>
+                        </div>
+                        <span className="text-xs text-slate-400">Based on rounded averages</span>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {[5, 4, 3, 2, 1].map((stars) => {
+                          const count = evaluationsSummary.scoreDistribution?.[stars] || 0
+                          const pct = evaluationsSummary.totalEvaluations > 0 ? (count / evaluationsSummary.totalEvaluations) * 100 : 0
+                          return (
+                            <div key={stars} className="flex items-center gap-3 text-xs">
+                              <div className="flex items-center gap-1 w-14 shrink-0 font-semibold text-slate-700 dark:text-slate-300">
+                                <span>{stars}</span>
+                                <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                              </div>
+                              <div className="flex-1 bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
+                                <div
+                                  className="h-3 rounded-full bg-amber-500 transition-all duration-500"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <div className="w-16 text-right shrink-0 font-medium text-slate-500 dark:text-slate-400">
+                                {count} ({Math.round(pct)}%)
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Criteria Rating Meters Chart */}
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs space-y-4">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                          <Award className="h-4 w-4 text-accent" />
+                          <span>Category Performance</span>
+                        </div>
+                        <span className="text-xs text-slate-400">Averages (1 - 5)</span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {[
+                          { label: 'Teaching Effectiveness', score: evaluationsSummary.averageTeachingEffectiveness, color: 'bg-indigo-500' },
+                          { label: 'Subject Knowledge', score: evaluationsSummary.averageSubjectKnowledge, color: 'bg-emerald-500' },
+                          { label: 'Communication Skills', score: evaluationsSummary.averageCommunication, color: 'bg-sky-500' },
+                          { label: 'Professionalism', score: evaluationsSummary.averageProfessionalism, color: 'bg-purple-500' },
+                          { label: 'Student Engagement', score: evaluationsSummary.averageStudentEngagement, color: 'bg-amber-500' },
+                        ].map((cat) => {
+                          const pct = (cat.score / 5) * 100
+                          return (
+                            <div key={cat.label} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">{cat.label}</span>
+                                <span className="font-bold text-slate-900 dark:text-white">{cat.score.toFixed(2)} / 5.0</span>
+                              </div>
+                              <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-2.5 rounded-full ${cat.color} transition-all duration-500`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* All Form Results Submitted by Students */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm uppercase tracking-wider">
+                        Student Submissions & Written Feedback ({evaluationsSummary.evaluations.length})
+                      </h4>
+                    </div>
+
+                    <div className="space-y-3">
+                      {evaluationsSummary.evaluations.map((evalItem, idx) => (
+                        <div
+                          key={evalItem.id || idx}
+                          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-xs space-y-3.5"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge tone="accent">
+                                Submission #{idx + 1}
+                              </Badge>
+                              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                                {evalItem.subjectCode} {evalItem.subjectName ? `· ${evalItem.subjectName}` : ''}
+                              </span>
+                              {evalItem.sectionCode && (
+                                <Badge tone="slate" className="font-mono text-[10px]">
+                                  Sec {evalItem.sectionCode}
+                                </Badge>
+                              )}
+                              <span className="text-xs text-slate-400">
+                                ({evalItem.semester} Sem {evalItem.schoolYear})
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 self-start sm:self-auto px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 font-bold text-xs text-amber-800 dark:text-amber-200">
+                              <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                              <span>Average: {evalItem.averageScore.toFixed(2)} / 5</span>
+                            </div>
+                          </div>
+
+                          {/* Scores Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                              <span className="text-[10px] text-slate-400 block uppercase">Teaching</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{evalItem.teachingEffectiveness} / 5</span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                              <span className="text-[10px] text-slate-400 block uppercase">Knowledge</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{evalItem.subjectKnowledge} / 5</span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                              <span className="text-[10px] text-slate-400 block uppercase">Communication</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{evalItem.communication} / 5</span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                              <span className="text-[10px] text-slate-400 block uppercase">Professionalism</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{evalItem.professionalism} / 5</span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                              <span className="text-[10px] text-slate-400 block uppercase">Engagement</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{evalItem.studentEngagement} / 5</span>
+                            </div>
+                          </div>
+
+                          {/* Comments */}
+                          <div className="rounded-lg bg-slate-50 dark:bg-slate-800/30 p-3.5 border border-slate-100 dark:border-slate-800 text-xs">
+                            <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              <MessageSquare className="h-3.5 w-3.5 text-accent" />
+                              <span>Student Feedback:</span>
+                            </div>
+                            <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                              {evalItem.comments || 'No written comments provided.'}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal Actions Footer (Fixed at bottom) */}
+            <div className="shrink-0 p-3 sm:p-4 sm:px-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end bg-slate-50/60 dark:bg-slate-900/60">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setEvaluationsFaculty(null)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

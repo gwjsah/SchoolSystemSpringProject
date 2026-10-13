@@ -221,7 +221,7 @@ export function ConfirmDialog({
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60" onClick={() => !loading && onCancel()} />
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !loading && onCancel()} />
       <div role="dialog" aria-modal="true" className="relative w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl transition-colors">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
         <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">{children}</div>

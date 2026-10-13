@@ -1,4 +1,5 @@
 import {
+  Award,
   BookOpen,
   CalendarClock,
   ClipboardList,
@@ -71,6 +72,13 @@ export const NAVIGATION = {
       icon: GraduationCap,
       planned: ['Prelim, midterm, pre-final and final grades', 'Computed and overall grade with remarks'],
       endpoints: ['GET /grades/my'],
+    },
+    {
+      path: 'faculty-evaluation',
+      label: 'Faculty Evaluation',
+      icon: Award,
+      planned: ['Evaluate assigned teachers for the current academic term'],
+      endpoints: ['GET /evaluations/my-teachers', 'POST /evaluations'],
     },
     {
       path: 'personal-info',

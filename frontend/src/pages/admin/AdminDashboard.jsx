@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useApi } from '../../hooks/useApi'
 import { Card, LoadingState, PageHeader, StatCard } from '../../components/ui'
 import AnnouncementList from '../../components/AnnouncementList'
+import AcademicPeriodsWidget from '../../components/AcademicPeriodsWidget'
 
 export default function AdminDashboard() {
   const { user } = useAuth()
@@ -67,7 +68,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Quick action shortcut cards */}
+        {/* Quick action shortcut cards & Academic Periods Widget */}
         <div className="lg:col-span-2 space-y-6">
           <Card title="Quick Management Shortcuts">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -136,6 +137,8 @@ export default function AdminDashboard() {
               </Link>
             </div>
           </Card>
+
+          <AcademicPeriodsWidget />
         </div>
 
         {/* Recent announcements */}

@@ -104,10 +104,43 @@ function checkScheduleConflict(section, cart) {
   return null
 }
 
+/** Checks if a candidate section has any time collisions with already selected subjects in cart or other previewed sections. */
+function checkPreviewConflicts(section, cart, otherPreviews = []) {
+  const cartConflict = checkScheduleConflict(section, cart)
+  if (cartConflict) return cartConflict
+
+  if (!section?.schedules || !otherPreviews?.length) return null
+  for (const other of otherPreviews) {
+    if (other.id === section.id) continue
+    if (!other.schedules) continue
+    for (const s1 of section.schedules) {
+      const start1 = toMinutes(s1.startTime)
+      const end1 = toMinutes(s1.endTime)
+      for (const s2 of other.schedules) {
+        if (s1.day === s2.day) {
+          const start2 = toMinutes(s2.startTime)
+          const end2 = toMinutes(s2.endTime)
+          if (start1 < end2 && start2 < end1) {
+            return {
+              conflictingSubject: other.subjectCode || 'Another preview',
+              conflictingSection: other.sectionCode,
+              day: s1.day,
+              startTime: s1.startTime,
+              endTime: s1.endTime,
+              isOtherPreview: true,
+            }
+          }
+        }
+      }
+    }
+  }
+  return null
+}
+
 /**
  * Student enrollment: eligibility gate -> pick a section per subject (cart) -> choose plan -> confirm.
  * Shows an interactive live weekly timetable reflecting all classes currently in the cart
- * and previews any hovered section before adding.
+ * and previews any toggled section before adding.
  */
 export default function EnrollmentPage() {
   const eligibility = useApi('/enrollment/eligibility')
@@ -151,7 +184,7 @@ function EnrollmentFlow({ onConfirmed }) {
   const [plan, setPlan] = useState('QUARTERLY')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const [previewSection, setPreviewSection] = useState(null) // Section hovered or toggled to preview on timetable
+  const [previewSections, setPreviewSections] = useState([]) // Array of sections toggled to preview on timetable
   const [viewMode, setViewMode] = useState('planner') // 'planner' (split), 'timetable' (focus), 'subjects' (compact)
 
   useEffect(() => {
@@ -174,6 +207,17 @@ function EnrollmentFlow({ onConfirmed }) {
     if (opening && !sections[code]?.data) loadSections(code)
   }
 
+  const togglePreview = (section) => {
+    setPreviewSections((prev) => {
+      const exists = prev.some((s) => s.id === section.id)
+      return exists ? prev.filter((s) => s.id !== section.id) : [...prev, section]
+    })
+  }
+
+  const clearPreviews = () => {
+    setPreviewSections([])
+  }
+
   const addToCart = async (section) => {
     setError('')
     setBusy(section.id)
@@ -181,9 +225,8 @@ function EnrollmentFlow({ onConfirmed }) {
       const res = await api.post('/enrollment/cart', { sectionId: section.id })
       setCart(res.data)
       setExpanded(null)
-      if (previewSection?.id === section.id) {
-        setPreviewSection(null)
-      }
+      setPreviewSections((prev) => prev.filter((s) => s.id !== section.id))
+      loadSections(section.subjectCode)
     } catch (err) {
       setError(getErrorMessage(err))
       loadSections(section.subjectCode) // slots may have changed
@@ -198,9 +241,7 @@ function EnrollmentFlow({ onConfirmed }) {
     try {
       const res = await api.delete(`/enrollment/cart/${encodeURIComponent(subjectCode)}`)
       setCart(res.data)
-      if (previewSection?.subjectCode === subjectCode) {
-        setPreviewSection(null)
-      }
+      loadSections(subjectCode)
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -313,8 +354,9 @@ function EnrollmentFlow({ onConfirmed }) {
         <div className="mb-8">
           <WeekTimetablePlanner
             cart={cart}
-            previewSection={previewSection}
-            onPreview={setPreviewSection}
+            previewSections={previewSections}
+            onTogglePreview={togglePreview}
+            onClearPreviews={clearPreviews}
             onRemoveItem={removeFromCart}
             colorMap={colorMap}
           />
@@ -372,8 +414,8 @@ function EnrollmentFlow({ onConfirmed }) {
                             state={sections[subject.subjectCode]}
                             busy={busy}
                             cart={cart}
-                            previewSection={previewSection}
-                            onPreview={setPreviewSection}
+                            previewSections={previewSections}
+                            onTogglePreview={togglePreview}
                             onAdd={addToCart}
                             onRetry={() => loadSections(subject.subjectCode)}
                           />
@@ -398,7 +440,7 @@ function EnrollmentFlow({ onConfirmed }) {
             >
               {cart.length === 0 ? (
                 <EmptyState title="No subjects selected">
-                  Open a subject on the left, hover or preview sections, and click Add.
+                  Open a subject on the left, preview sections, and click Add.
                 </EmptyState>
               ) : (
                 <ul className="divide-y divide-slate-100 dark:divide-slate-800 max-h-72 overflow-y-auto">
@@ -482,7 +524,7 @@ function EnrollmentFlow({ onConfirmed }) {
                 <Info className="h-4 w-4 text-accent" />
                 <span>Interactive Schedule Plotter</span>
               </div>
-              <p>Hover over or click <span className="font-semibold text-slate-700 dark:text-slate-300">Preview</span> on any section to test how it plots on your weekly timetable before adding.</p>
+              <p>Click <span className="font-semibold text-slate-700 dark:text-slate-300">Preview</span> on any section to test how it plots on your weekly timetable before adding. You can preview multiple sections simultaneously.</p>
             </div>
           </div>
         </div>
@@ -493,8 +535,9 @@ function EnrollmentFlow({ onConfirmed }) {
         <div id="enrollment-timetable" className="mt-8">
           <WeekTimetablePlanner
             cart={cart}
-            previewSection={previewSection}
-            onPreview={setPreviewSection}
+            previewSections={previewSections}
+            onTogglePreview={togglePreview}
+            onClearPreviews={clearPreviews}
             onRemoveItem={removeFromCart}
             colorMap={colorMap}
           />
@@ -525,7 +568,7 @@ function EnrollmentFlow({ onConfirmed }) {
 }
 
 /** Section Picker under each expandable subject */
-function SectionPicker({ state, busy, cart, previewSection, onPreview, onAdd, onRetry }) {
+function SectionPicker({ state, busy, cart, previewSections, onTogglePreview, onAdd, onRetry }) {
   if (!state || state.loading) return <div className="px-12 pb-4 text-sm text-slate-500 dark:text-slate-400">Loading sections…</div>
   if (state.error)
     return (
@@ -544,17 +587,13 @@ function SectionPicker({ state, busy, cart, previewSection, onPreview, onAdd, on
   return (
     <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 px-5 py-3 sm:pl-12">
       {state.data.map((section) => {
-        const isPreviewing = previewSection?.id === section.id
+        const isPreviewing = previewSections?.some((s) => s.id === section.id)
         const conflict = checkScheduleConflict(section, cart)
         const isFull = section.availableSlots <= 0
 
         return (
           <div
             key={section.id}
-            onMouseEnter={() => !isPreviewing && onPreview(section)}
-            onMouseLeave={() => {
-              if (previewSection?.id === section.id) onPreview(null)
-            }}
             className={`flex flex-col gap-3 rounded-lg border p-3 transition-all sm:flex-row sm:items-center ${
               isPreviewing
                 ? 'border-accent bg-accent/5 dark:bg-accent/15 ring-1 ring-accent'
@@ -592,7 +631,7 @@ function SectionPicker({ state, busy, cart, previewSection, onPreview, onAdd, on
 
               <button
                 type="button"
-                onClick={() => onPreview(isPreviewing ? null : section)}
+                onClick={() => onTogglePreview(section)}
                 className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border transition-colors ${
                   isPreviewing
                     ? 'border-accent bg-accent text-white shadow-xs'
@@ -622,7 +661,7 @@ function SectionPicker({ state, busy, cart, previewSection, onPreview, onAdd, on
 }
 
 /** Weekly Timetable Planner component */
-function WeekTimetablePlanner({ cart, previewSection, onPreview, onRemoveItem, colorMap }) {
+function WeekTimetablePlanner({ cart, previewSections = [], onTogglePreview, onClearPreviews, onRemoveItem, colorMap }) {
   // Collect all schedule items to render on the grid
   const scheduleItems = []
 
@@ -646,24 +685,28 @@ function WeekTimetablePlanner({ cart, previewSection, onPreview, onRemoveItem, c
     }
   }
 
-  // 2. Section currently previewed/hovered (ghost slot)
-  const conflict = previewSection ? checkScheduleConflict(previewSection, cart) : null
-  if (previewSection && previewSection.schedules) {
-    for (const sched of previewSection.schedules) {
-      scheduleItems.push({
-        isPreview: true,
-        hasConflict: Boolean(conflict),
-        conflictWith: conflict?.conflictingSubject,
-        id: `preview-${sched.id || sched.day}-${sched.startTime}`,
-        day: sched.day,
-        startTime: sched.startTime,
-        endTime: sched.endTime,
-        subjectCode: previewSection.subjectCode || 'PREVIEW',
-        subjectName: previewSection.subjectName || '',
-        sectionCode: previewSection.sectionCode,
-        roomName: sched.roomName || 'TBA',
-        facultyName: previewSection.facultyName || 'TBA',
-      })
+  // 2. Sections currently previewed (ghost slots)
+  const anyConflict = previewSections.some((p) => checkPreviewConflicts(p, cart, previewSections))
+  for (const pSec of previewSections) {
+    const conflict = checkPreviewConflicts(pSec, cart, previewSections)
+    if (pSec.schedules) {
+      for (const sched of pSec.schedules) {
+        scheduleItems.push({
+          isPreview: true,
+          sectionId: pSec.id,
+          hasConflict: Boolean(conflict),
+          conflictWith: conflict?.conflictingSubject,
+          id: `preview-${pSec.id}-${sched.id || sched.day}-${sched.startTime}`,
+          day: sched.day,
+          startTime: sched.startTime,
+          endTime: sched.endTime,
+          subjectCode: pSec.subjectCode || 'PREVIEW',
+          subjectName: pSec.subjectName || '',
+          sectionCode: pSec.sectionCode,
+          roomName: sched.roomName || 'TBA',
+          facultyName: pSec.facultyName || 'TBA',
+        })
+      }
     }
   }
 
@@ -679,21 +722,25 @@ function WeekTimetablePlanner({ cart, previewSection, onPreview, onRemoveItem, c
             </span>
           </div>
 
-          {previewSection && (
+          {previewSections.length > 0 && (
             <div className="flex items-center gap-2 text-xs">
               <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold ${
-                conflict
+                anyConflict
                   ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200'
                   : 'bg-accent/15 text-accent dark:text-accent-300'
               }`}>
-                {conflict ? <AlertTriangle className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                {conflict ? `Conflict: ${previewSection.sectionCode} overlaps with ${conflict.conflictingSubject}` : `Previewing ${previewSection.sectionCode}`}
+                {anyConflict ? <AlertTriangle className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                <span>
+                  {anyConflict
+                    ? `Conflict detected in previewed schedule`
+                    : `Previewing ${previewSections.length} section${previewSections.length === 1 ? '' : 's'}`}
+                </span>
               </span>
               <button
                 type="button"
-                onClick={() => onPreview(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                title="Clear preview"
+                onClick={onClearPreviews}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                title="Clear all previews"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -707,7 +754,7 @@ function WeekTimetablePlanner({ cart, previewSection, onPreview, onRemoveItem, c
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-4 py-2.5 text-xs">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-slate-500 dark:text-slate-400">Plotted Subjects:</span>
-          {cart.length === 0 && !previewSection && (
+          {cart.length === 0 && previewSections.length === 0 && (
             <span className="text-slate-400 dark:text-slate-500 italic">No classes plotted yet. Pick sections above.</span>
           )}
           {cart.map((item) => {
@@ -730,18 +777,30 @@ function WeekTimetablePlanner({ cart, previewSection, onPreview, onRemoveItem, c
               </span>
             )
           })}
-          {previewSection && (
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-medium border border-dashed ${
-                conflict
-                  ? 'border-rose-400 bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200'
-                  : 'border-accent bg-accent/10 text-accent dark:text-accent-300'
-              }`}
-            >
-              <Eye className="h-3 w-3" />
-              <span>Preview: {previewSection.sectionCode}</span>
-            </span>
-          )}
+          {previewSections.map((pSec) => {
+            const conflict = checkPreviewConflicts(pSec, cart, previewSections)
+            return (
+              <span
+                key={pSec.id}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-medium border border-dashed ${
+                  conflict
+                    ? 'border-rose-400 bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200'
+                    : 'border-accent bg-accent/10 text-accent dark:text-accent-300'
+                }`}
+              >
+                <Eye className="h-3 w-3" />
+                <span>Preview: {pSec.subjectCode ? `${pSec.subjectCode} (${pSec.sectionCode})` : pSec.sectionCode}</span>
+                <button
+                  type="button"
+                  onClick={() => onTogglePreview(pSec)}
+                  className="rounded p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10"
+                  title={`Stop previewing ${pSec.sectionCode}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )
+          })}
         </div>
 
         <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">

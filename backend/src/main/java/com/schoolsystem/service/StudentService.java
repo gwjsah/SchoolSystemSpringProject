@@ -12,6 +12,9 @@ import com.schoolsystem.entity.Student;
 import com.schoolsystem.entity.enums.AdmissionStatus;
 import com.schoolsystem.exception.NotFoundException;
 import com.schoolsystem.repository.AccountRepository;
+import com.schoolsystem.repository.AdmissionPeriodRepository;
+import com.schoolsystem.repository.CartItemRepository;
+import com.schoolsystem.repository.SectionRepository;
 import com.schoolsystem.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,9 +33,16 @@ public class StudentService {
     private final StudentRepository studentRepository;
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CartItemRepository cartItemRepository;
+    private final SectionRepository sectionRepository;
+    private final AdmissionPeriodRepository admissionPeriodRepository;
 
     @Transactional
     public AdmissionApplicationResponse applyForAdmission(AdmissionApplicationRequest req) {
+        if (admissionPeriodRepository.findFirstByIsOpenTrueOrderByStartsAtDesc().isEmpty()) {
+            throw new IllegalStateException("Admission is currently closed. Online applications are not being accepted at this time.");
+        }
+
         String email = req.email().trim().toLowerCase();
         if (accountRepository.findByEmailIgnoreCase(email).isPresent()) {
             throw new IllegalArgumentException("An account with this email address already exists.");
@@ -252,6 +262,17 @@ public class StudentService {
     public void deleteStudent(String id) {
         Student student = studentRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Student not found"));
+
+        var cartItems = cartItemRepository.findByStudent_IdOrderByAddedAtAsc(id);
+        for (var item : cartItems) {
+            var section = item.getSection();
+            if (section.getCurrentCount() > 0) {
+                section.decrementCurrentCount();
+                sectionRepository.save(section);
+            }
+        }
+        cartItemRepository.deleteByStudent_Id(id);
+
         studentRepository.delete(student);
     }
 

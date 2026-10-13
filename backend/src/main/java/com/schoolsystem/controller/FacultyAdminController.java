@@ -1,4 +1,4 @@
-package com.schoolsystem.controller;
+    package com.schoolsystem.controller;
 
 import com.schoolsystem.dto.Requests.FacultyCreateRequest;
 import com.schoolsystem.dto.Requests.FacultyUpdateRequest;
@@ -19,6 +19,7 @@ import java.util.List;
 public class FacultyAdminController {
 
     private final FacultyService facultyService;
+    private final com.schoolsystem.service.EvaluationService evaluationService;
 
     @GetMapping
     public List<FacultyDetailDto> getAllFaculty(
@@ -30,6 +31,11 @@ public class FacultyAdminController {
     @GetMapping("/{id}")
     public FacultyDetailDto getFacultyById(@PathVariable String id) {
         return facultyService.getFacultyById(id);
+    }
+
+    @GetMapping("/{id}/evaluations")
+    public com.schoolsystem.dto.Responses.FacultyEvaluationSummaryDto getFacultyEvaluations(@PathVariable String id) {
+        return evaluationService.getFacultyEvaluationSummary(id);
     }
 
     @PostMapping
