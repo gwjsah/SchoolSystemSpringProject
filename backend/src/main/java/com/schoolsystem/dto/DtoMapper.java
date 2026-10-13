@@ -123,8 +123,12 @@ public final class DtoMapper {
     }
 
     public static SubjectDto subject(Subject s) {
+        List<AccountDto> facultyDtos = s.getAssignedFaculties() != null
+                ? s.getAssignedFaculties().stream().map(DtoMapper::account).toList()
+                : List.of();
         return new SubjectDto(s.getId(), s.getSubjectCode(), s.getSubjectName(), s.getUnits(),
-                s.getYearLevel(), s.getSemester(), s.getCourse(), List.copyOf(s.getPrerequisites()));
+                s.getYearLevel(), s.getSemester(), s.getCourse(), List.copyOf(s.getPrerequisites()),
+                facultyDtos);
     }
 
     public static CourseDto course(Course c) {

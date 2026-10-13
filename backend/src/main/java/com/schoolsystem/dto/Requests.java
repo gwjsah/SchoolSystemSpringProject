@@ -51,6 +51,8 @@ public final class Requests {
             @NotBlank(message = "Course is required") String course,
             List<String> prerequisites) {}
 
+    public record AssignFacultyRequest(List<String> facultyIds) {}
+
     /** subjectCode is only used when creating a section. */
     public record SectionRequest(
             String subjectCode,
@@ -145,4 +147,22 @@ public final class Requests {
             String emergencyContactName,
             String emergencyContactRelationship,
             String emergencyContactPhone) {}
+
+    public record FacultyCreateRequest(
+            @NotBlank(message = "Name is required") String name,
+            @NotBlank(message = "Email is required") @jakarta.validation.constraints.Email String email,
+            @NotBlank(message = "Password is required") @jakarta.validation.constraints.Size(min = 6) String password,
+            String contactNumber,
+            String employeeNumber,
+            @NotBlank(message = "Department cannot be empty") String department,
+            @NotBlank(message = "Position cannot be empty") String position) {}
+
+    public record FacultyUpdateRequest(
+            @NotBlank(message = "Name is required") String name,
+            @NotBlank(message = "Email is required") @jakarta.validation.constraints.Email String email,
+            String contactNumber,
+            String employeeNumber,
+            @NotBlank(message = "Department cannot be empty") String department,
+            @NotBlank(message = "Position cannot be empty") String position,
+            String password) {}
 }

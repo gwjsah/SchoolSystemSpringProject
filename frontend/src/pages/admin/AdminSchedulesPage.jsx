@@ -195,10 +195,16 @@ export default function AdminSchedulesPage() {
     const roomObj = activeRooms.find((r) => r.id === roomId) || activeRooms[0]
     const defaultCapacity = roomObj ? Math.min(roomObj.capacity, 40) : 30
 
+    const defaultSubject = subjectList[0]
+    let defaultFacultyId = ''
+    if (defaultSubject?.assignedFaculty && defaultSubject.assignedFaculty.length > 0) {
+      defaultFacultyId = defaultSubject.assignedFaculty[0].id
+    }
+
     setEditingSectionId(null)
     setSectionForm({
-      subjectCode: subjectList[0]?.subjectCode || '',
-      facultyId: facultyList[0]?.id || '',
+      subjectCode: defaultSubject?.subjectCode || '',
+      facultyId: defaultFacultyId,
       capacity: defaultCapacity,
       schedules: [
         {
@@ -270,6 +276,58 @@ export default function AdminSchedulesPage() {
       const sEnd = toMinutes(s.endTime)
       return Math.max(startMin, sStart) < Math.min(endMin, sEnd)
     })
+  }
+
+  // Selected subject object in the section modal
+  const selectedSubjectObj = useMemo(() => {
+    return subjectList.find((s) => s.subjectCode === sectionForm.subjectCode)
+  }, [subjectList, sectionForm.subjectCode])
+
+  // Eligible faculty for the selected subject (STRICT: only faculty assigned to this subject on Academic Subjects page)
+  const eligibleFacultyList = useMemo(() => {
+    if (selectedSubjectObj?.assignedFaculty && selectedSubjectObj.assignedFaculty.length > 0) {
+      const assignedIds = new Set(selectedSubjectObj.assignedFaculty.map((f) => f.id))
+      return facultyList.filter((f) => assignedIds.has(f.id))
+    }
+    return []
+  }, [selectedSubjectObj, facultyList])
+
+  // Check if a faculty member has a schedule conflict with any of the candidate slots in sectionForm
+  const getFacultyConflictInfo = (facultyId) => {
+    if (!facultyId || !sectionForm.schedules || sectionForm.schedules.length === 0) return null
+
+    // Find all sections taught by this faculty (excluding the section currently being edited)
+    const otherSections = sectionList.filter(
+      (sec) => sec.facultyId === facultyId && sec.id !== editingSectionId
+    )
+
+    for (const candSlot of sectionForm.schedules) {
+      if (!candSlot.day || !candSlot.startTime || !candSlot.endTime) continue
+      const candStart = toMinutes(candSlot.startTime)
+      const candEnd = toMinutes(candSlot.endTime)
+      if (candStart >= candEnd) continue
+
+      for (const sec of otherSections) {
+        for (const s of sec.schedules || []) {
+          if (s.day === candSlot.day) {
+            const sStart = toMinutes(s.startTime)
+            const sEnd = toMinutes(s.endTime)
+            if (candStart < sEnd && sStart < candEnd) {
+              return {
+                conflictingSection: sec.sectionCode,
+                subjectCode: sec.subjectCode,
+                day: s.day,
+                startTime: s.startTime?.substring(0, 5),
+                endTime: s.endTime?.substring(0, 5),
+                roomName: s.roomName || 'Classroom',
+                reason: `Conflict: Already teaching ${sec.sectionCode} (${sec.subjectCode}) on ${s.day} ${s.startTime?.substring(0, 5)}–${s.endTime?.substring(0, 5)} in ${s.roomName || 'Classroom'}`
+              }
+            }
+          }
+        }
+      }
+    }
+    return null
   }
 
   // Cell interaction handlers: Shift-select, Drag-select, and Gap Prevention
@@ -415,8 +473,16 @@ export default function AdminSchedulesPage() {
       setModalError('Please select a subject.')
       return
     }
+    if (eligibleFacultyList.length === 0) {
+      setModalError(`No faculty members are assigned to teach ${sectionForm.subjectCode}. Please assign faculty on the Academic Subjects page first.`)
+      return
+    }
     if (!sectionForm.facultyId) {
       setModalError('Please select an instructor/faculty member.')
+      return
+    }
+    if (!eligibleFacultyList.some((f) => f.id === sectionForm.facultyId)) {
+      setModalError(`Selected faculty is not assigned to teach ${sectionForm.subjectCode}. Please assign them on the Academic Subjects page first.`)
       return
     }
     if (sectionForm.capacity <= 0) {
@@ -1229,13 +1295,29 @@ export default function AdminSchedulesPage() {
                   <select
                     id="subjectCode"
                     value={sectionForm.subjectCode}
-                    onChange={(e) => setSectionForm({ ...sectionForm, subjectCode: e.target.value })}
+                    onChange={(e) => {
+                      const newSubjCode = e.target.value
+                      const newSubj = subjectList.find((s) => s.subjectCode === newSubjCode)
+                      let newFacultyId = ''
+                      if (newSubj?.assignedFaculty && newSubj.assignedFaculty.length > 0) {
+                        const isCurrentAssigned = newSubj.assignedFaculty.some((f) => f.id === sectionForm.facultyId)
+                        newFacultyId = isCurrentAssigned ? sectionForm.facultyId : newSubj.assignedFaculty[0].id
+                      }
+                      setSectionForm({
+                        ...sectionForm,
+                        subjectCode: newSubjCode,
+                        facultyId: newFacultyId,
+                      })
+                    }}
                     className={inputClass}
                     required
                   >
                     {subjectList.map((subj) => (
                       <option key={subj.subjectCode} value={subj.subjectCode}>
                         {subj.subjectCode} — {subj.subjectName} ({subj.units} units · {subj.course})
+                        {subj.assignedFaculty && subj.assignedFaculty.length > 0
+                          ? ` [${subj.assignedFaculty.length} assigned faculty]`
+                          : ''}
                       </option>
                     ))}
                   </select>
@@ -1248,20 +1330,80 @@ export default function AdminSchedulesPage() {
               )}
 
               {/* Faculty / Instructor */}
-              <Field label="Assigned Faculty / Instructor" htmlFor="facultyId">
-                <select
-                  id="facultyId"
-                  value={sectionForm.facultyId}
-                  onChange={(e) => setSectionForm({ ...sectionForm, facultyId: e.target.value })}
-                  className={inputClass}
-                  required
-                >
-                  {facultyList.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({f.email})
-                    </option>
-                  ))}
-                </select>
+              <Field
+                label="Assigned Faculty / Instructor"
+                htmlFor="facultyId"
+                hint={
+                  eligibleFacultyList.length > 0
+                    ? `Showing ${eligibleFacultyList.length} faculty assigned to teach ${sectionForm.subjectCode}`
+                    : `No faculty assigned to teach ${sectionForm.subjectCode} yet`
+                }
+              >
+                {(() => {
+                  if (eligibleFacultyList.length === 0) {
+                    return (
+                      <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-800 dark:text-amber-200 space-y-1.5">
+                        <div className="flex items-center gap-1.5 font-semibold text-amber-900 dark:text-amber-100">
+                          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span>No Faculty Assigned to this Subject</span>
+                        </div>
+                        <p className="leading-relaxed">
+                          Teachers can only be assigned to a section if they have been assigned to teach{' '}
+                          <strong className="underline">{sectionForm.subjectCode}</strong> on the{' '}
+                          <strong>Academic Subjects</strong> page.
+                        </p>
+                        <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                          Please go to <em>Academic Subjects &gt; Assign Faculty</em> to add qualified instructors first before creating a section.
+                        </p>
+                      </div>
+                    )
+                  }
+
+                  const currentSelectedConflict = getFacultyConflictInfo(sectionForm.facultyId)
+                  return (
+                    <div className="space-y-2">
+                      <select
+                        id="facultyId"
+                        value={sectionForm.facultyId}
+                        onChange={(e) => setSectionForm({ ...sectionForm, facultyId: e.target.value })}
+                        className={`${inputClass} ${
+                          currentSelectedConflict
+                            ? 'border-red-500 dark:border-red-500 bg-red-50/50 dark:bg-red-950/30 text-red-700 dark:text-red-300 ring-1 ring-red-500'
+                            : ''
+                        }`}
+                        required
+                      >
+                        {eligibleFacultyList.map((f) => {
+                          const conflict = getFacultyConflictInfo(f.id)
+                          return (
+                            <option
+                              key={f.id}
+                              value={f.id}
+                              className={conflict ? 'text-red-600 bg-red-50 dark:bg-red-950 font-semibold' : ''}
+                            >
+                              {f.name} ({f.email})
+                              {conflict ? ` ⚠️ [CONFLICT: ${conflict.conflictingSection} on ${conflict.day} ${conflict.startTime}–${conflict.endTime}]` : ' ✓ Available'}
+                            </option>
+                          )
+                        })}
+                      </select>
+
+                      {/* Immediate Live Conflict Warning Banner */}
+                      {currentSelectedConflict && (
+                        <div className="flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/50 p-2.5 text-xs text-red-700 dark:text-red-300">
+                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+                          <div>
+                            <p className="font-bold">Faculty Schedule Conflict Detected</p>
+                            <p className="mt-0.5 leading-relaxed">{currentSelectedConflict.reason}</p>
+                            <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">
+                              Please select a different available instructor or change the section's meeting time slots below to resolve this clash.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </Field>
 
               {/* Capacity */}
@@ -1411,7 +1553,11 @@ export default function AdminSchedulesPage() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" loading={submitting}>
+                <Button
+                  type="submit"
+                  loading={submitting}
+                  disabled={eligibleFacultyList.length === 0 || !sectionForm.facultyId}
+                >
                   {editingSectionId ? 'Update Section' : 'Create & Schedule Section'}
                 </Button>
               </div>

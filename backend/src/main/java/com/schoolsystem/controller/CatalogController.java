@@ -103,6 +103,21 @@ public class CatalogController {
         subjectRepository.delete(s);
     }
 
+    /** Bulk assign faculty qualified/assigned to teach a subject. */
+    @PutMapping("/subjects/{id}/faculty")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public SubjectDto assignFacultyToSubject(@PathVariable String id,
+                                             @RequestBody Requests.AssignFacultyRequest r) {
+        Subject s = subjectRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Subject not found: " + id));
+        List<com.schoolsystem.entity.Faculty> facultyMembers = (r.facultyIds() != null && !r.facultyIds().isEmpty())
+                ? facultyRepository.findAllById(r.facultyIds())
+                : new java.util.ArrayList<>();
+        s.setAssignedFaculties(facultyMembers);
+        return DtoMapper.subject(subjectRepository.save(s));
+    }
+
     @GetMapping("/courses")
     public List<CourseDto> courses() {
         return courseRepository.findAll().stream().map(DtoMapper::course).toList();

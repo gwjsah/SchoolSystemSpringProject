@@ -102,21 +102,32 @@ Pattern pairs:
 The academic curriculum partitions subjects according to prefix conventions:
 1. **`CSIT` Prefix** (e.g. `CSIT111`, `CSIT121`, `CSIT221`, `CSIT226`, `CSIT227`, `CSIT228`, `CSIT321`):
    - **Common Core Computing**: Open to **both** BSCS and BSIT students.
+   - **Database Value**: The `course` column for all `CSIT` subjects MUST be set to `'CSIT'`.
+   - A corresponding record in `courses` table with `code = 'CSIT'` ("Common Computer Studies", prefix `'CSIT-C'`) should exist.
 2. **`CS` Prefix** (e.g. `CS111`, `CS112`, `CS121`, `CS211`, `CS311`):
-   - **Computer Science Specific**: Restrict enrollment strictly to **BSCS students only**.
+   - **Computer Science Specific**: Restrict enrollment strictly to **BSCS students only** (Course = `'BSCS'`).
 3. **`IT` Prefix** (e.g. `IT211`, `IT221`, `IT311`, `IT312`, `IT321`):
-   - **Information Technology Specific**: Restrict enrollment strictly to **BSIT students only**.
+   - **Information Technology Specific**: Restrict enrollment strictly to **BSIT students only** (Course = `'BSIT'`).
 4. **Non-`CS`, `IT`, or `CSIT` Prefixes** (`GEN` / General Education, e.g. `MATH`, `ENGL`, `PHILO`, `NSTP`, `PE`, `HIST`, `STS`, `STAT`):
    - **General Education / Institutional Core**: Open to **any student across all programs**.
    - **Database Value**: The `course` column for all these General Education subjects in the `subjects` table MUST be set to `'GEN'` (NOT `'BSIT'` or `'BSCS'`).
    - A corresponding record in `courses` table with `code = 'GEN'` ("General Education Department", prefix `'GEN-G'`) should exist.
 
 ```sql
--- Ensure GEN course exists
-INSERT IGNORE INTO courses (id, code, name, section_prefix)
-VALUES ('course-gen', 'GEN', 'General Education Department', 'GEN-G');
+USE `school_management`;
 
--- Align all General Education subjects to 'GEN' in subjects table
+-- Ensure CSIT and GEN courses exist
+INSERT IGNORE INTO courses (id, code, name, section_prefix)
+VALUES 
+  ('course-csit', 'CSIT', 'Common Computer Studies', 'CSIT-C'),
+  ('course-gen', 'GEN', 'General Education Department', 'GEN-G');
+
+-- Align CSIT subjects to 'CSIT'
+UPDATE subjects
+SET course = 'CSIT'
+WHERE subject_code LIKE 'CSIT%';
+
+-- Align General Education subjects to 'GEN'
 UPDATE subjects 
 SET course = 'GEN' 
 WHERE subject_code NOT LIKE 'CS%' 

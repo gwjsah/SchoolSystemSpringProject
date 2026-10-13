@@ -25,6 +25,7 @@ import AdminRoomsPage from './pages/admin/AdminRoomsPage'
 import AdminSchedulesPage from './pages/admin/AdminSchedulesPage'
 import AdminSectionsPage from './pages/admin/AdminSectionsPage'
 import AdminStudentsPage from './pages/admin/AdminStudentsPage'
+import AdminFacultyPage from './pages/admin/AdminFacultyPage'
 import AdmissionApplyPage from './pages/AdmissionApplyPage'
 
 const STUDENT_COMPONENTS = {
@@ -51,6 +52,7 @@ const ADMIN_COMPONENTS = {
   schedules: AdminSchedulesPage,
   sections: AdminSectionsPage,
   students: AdminStudentsPage,
+  faculty: AdminFacultyPage,
 }
 
 /** Builds the routes for one role from its navigation config. */

@@ -55,7 +55,20 @@ public class Subject {
     @Column(name = "prerequisite_code")
     private List<String> prerequisites = new ArrayList<>();
 
+    /** Faculty members qualified / assigned to teach this subject. */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "subject_assigned_faculty",
+            joinColumns = @JoinColumn(name = "subject_id"),
+            inverseJoinColumns = @JoinColumn(name = "faculty_id")
+    )
+    private List<Faculty> assignedFaculties = new ArrayList<>();
+
     public void setPrerequisites(List<String> prerequisites) {
         this.prerequisites = prerequisites != null ? prerequisites : new ArrayList<>();
+    }
+
+    public void setAssignedFaculties(List<Faculty> assignedFaculties) {
+        this.assignedFaculties = assignedFaculties != null ? assignedFaculties : new ArrayList<>();
     }
 }

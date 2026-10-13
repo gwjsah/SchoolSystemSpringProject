@@ -74,7 +74,8 @@ public final class Responses {
 
     public record SubjectDto(
             String id, String subjectCode, String subjectName, int units, int yearLevel,
-            Semester semester, String course, List<String> prerequisites) {}
+            Semester semester, String course, List<String> prerequisites,
+            List<AccountDto> assignedFaculty) {}
 
     public record CourseDto(String id, String code, String name, String sectionPrefix) {}
 
@@ -115,4 +116,15 @@ public final class Responses {
             Status enrollmentStatus, GradeDto grade) {}
 
     public record GradingStatusDto(boolean canEdit, boolean pastDeadline) {}
+
+    public record FacultyDetailDto(
+            String id,
+            String name,
+            String email,
+            String contactNumber,
+            String employeeNumber,
+            String department,
+            String position,
+            List<SubjectDto> assignedSubjects,
+            List<SectionDto> sections) {}
 }

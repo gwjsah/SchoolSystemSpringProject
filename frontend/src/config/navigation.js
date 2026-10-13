@@ -176,6 +176,22 @@ export const NAVIGATION = {
         'POST /admin/students/{id}/reject',
       ],
     },
+    {
+      path: 'faculty',
+      label: 'Faculty',
+      icon: GraduationCap,
+      planned: [
+        'Manage faculty accounts and profile info',
+        'Clickable faculty directory with profile card',
+        'View assigned subjects, sections, and weekly schedule timetable',
+      ],
+      endpoints: [
+        'GET /admin/faculty',
+        'POST /admin/faculty',
+        'PUT /admin/faculty/{id}',
+        'DELETE /admin/faculty/{id}',
+      ],
+    },
   ],
 }
 

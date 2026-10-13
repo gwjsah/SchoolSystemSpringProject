@@ -67,6 +67,11 @@ public class SectionService {
         Faculty faculty = facultyRepository.findById(facultyId)
                 .orElseThrow(() -> new NotFoundException("Faculty not found"));
 
+        // Validate that faculty is assigned to teach this subject
+        if (subject.getAssignedFaculties() == null || subject.getAssignedFaculties().stream().noneMatch(f -> f.getId().equals(facultyId))) {
+            throw new IllegalStateException("Faculty " + faculty.getName() + " is not assigned to teach subject " + subjectCode + ". Please assign them on the Academic Subjects page first.");
+        }
+
         List<Schedule> candidates = buildCandidates(slots, capacity);
         checkConflicts(candidates, facultyId, null);
 
@@ -98,6 +103,12 @@ public class SectionService {
         Section section = findSection(sectionId);
         Faculty faculty = facultyRepository.findById(facultyId)
                 .orElseThrow(() -> new NotFoundException("Faculty not found"));
+
+        // Validate that faculty is assigned to teach this subject
+        Subject subject = section.getSubject();
+        if (subject != null && (subject.getAssignedFaculties() == null || subject.getAssignedFaculties().stream().noneMatch(f -> f.getId().equals(facultyId)))) {
+            throw new IllegalStateException("Faculty " + faculty.getName() + " is not assigned to teach subject " + subject.getSubjectCode() + ". Please assign them on the Academic Subjects page first.");
+        }
 
         List<Schedule> candidates = buildCandidates(slots, capacity);
         checkConflicts(candidates, facultyId, section);

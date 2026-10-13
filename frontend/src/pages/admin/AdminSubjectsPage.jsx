@@ -11,6 +11,8 @@ import {
   Sparkles,
   CheckCircle2,
   X,
+  Users,
+  UserCheck,
 } from 'lucide-react'
 import api, { getErrorMessage } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
@@ -32,6 +34,7 @@ import { SEMESTER_LABEL, labelize } from '../../lib/format'
 export default function AdminSubjectsPage() {
   const subjects = useApi('/subjects')
   const courses = useApi('/courses')
+  const faculty = useApi('/faculty')
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -56,6 +59,13 @@ export default function AdminSubjectsPage() {
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // Faculty assignment modal state
+  const [facultyModalOpen, setFacultyModalOpen] = useState(false)
+  const [assignSubject, setAssignSubject] = useState(null)
+  const [selectedFacultyIds, setSelectedFacultyIds] = useState([])
+  const [assigningFaculty, setAssigningFaculty] = useState(false)
+  const [assignError, setAssignError] = useState('')
+
   // Populate data status
   const [populating, setPopulating] = useState(false)
   const [popSuccess, setPopSuccess] = useState('')
@@ -67,6 +77,7 @@ export default function AdminSubjectsPage() {
 
   const subjectList = subjects.data ?? []
   const courseList = courses.data ?? []
+  const facultyList = faculty.data ?? []
 
   // Filtered & sorted subjects
   const filteredSubjects = useMemo(() => {
@@ -203,6 +214,41 @@ export default function AdminSubjectsPage() {
           : [...prev.prerequisites, code],
       }
     })
+  }
+
+  const openAssignFacultyModal = (s) => {
+    setAssignSubject(s)
+    const existingIds = (s.assignedFaculty || []).map((f) => f.id)
+    setSelectedFacultyIds(existingIds)
+    setAssignError('')
+    setFacultyModalOpen(true)
+  }
+
+  const toggleFacultySelection = (facultyId) => {
+    setSelectedFacultyIds((prev) =>
+      prev.includes(facultyId)
+        ? prev.filter((id) => id !== facultyId)
+        : [...prev, facultyId]
+    )
+  }
+
+  const handleSaveAssignedFaculty = async (e) => {
+    e.preventDefault()
+    if (!assignSubject) return
+    setAssigningFaculty(true)
+    setAssignError('')
+    try {
+      await api.put(`/subjects/${assignSubject.id}/faculty`, {
+        facultyIds: selectedFacultyIds,
+      })
+      setActionMessage(`Updated assigned faculty for ${assignSubject.subjectCode} (${selectedFacultyIds.length} faculty assigned).`)
+      setFacultyModalOpen(false)
+      subjects.reload()
+    } catch (err) {
+      setAssignError(getErrorMessage(err))
+    } finally {
+      setAssigningFaculty(false)
+    }
   }
 
   const loading = (subjects.loading && !subjects.data) || (courses.loading && !courses.data)
@@ -352,70 +398,94 @@ export default function AdminSubjectsPage() {
                   <th className="px-4 py-3">Subject Name</th>
                   <th className="px-4 py-3">Year & Term</th>
                   <th className="px-4 py-3">Units</th>
+                  <th className="px-4 py-3">Assigned Faculty</th>
                   <th className="px-4 py-3">Prerequisites</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {filteredSubjects.map((s) => (
-                  <tr key={s.id || s.subjectCode} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-mono font-bold text-slate-900 dark:text-white">
-                        {s.subjectCode}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-semibold text-slate-900 dark:text-white">{s.subjectName}</p>
-                        <span className="inline-block mt-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          {s.course}
+                {filteredSubjects.map((s) => {
+                  const assigned = s.assignedFaculty || []
+                  return (
+                    <tr key={s.id || s.subjectCode} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="font-mono font-bold text-slate-900 dark:text-white">
+                          {s.subjectCode}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-                        Year {s.yearLevel} · {s.semester === 'FIRST' ? '1st Sem' : '2nd Sem'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={s.units >= 3 ? 'blue' : 'gray'}>{s.units} units</Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {s.prerequisites && s.prerequisites.length > 0 ? (
-                          s.prerequisites.map((p) => (
-                            <span
-                              key={p}
-                              className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[11px] font-mono text-slate-700 dark:text-slate-300"
-                            >
-                              {p}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">None</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      </td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-semibold text-slate-900 dark:text-white">{s.subjectName}</p>
+                          <span className="inline-block mt-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            {s.course}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                          Year {s.yearLevel} · {s.semester === 'FIRST' ? '1st Sem' : '2nd Sem'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge tone={s.units >= 3 ? 'blue' : 'gray'}>{s.units} units</Badge>
+                      </td>
+                      <td className="px-4 py-3">
                         <button
-                          onClick={() => openEditModal(s)}
-                          className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                          title="Edit Subject"
+                          type="button"
+                          onClick={() => openAssignFacultyModal(s)}
+                          className="group flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 px-2 py-1 text-xs hover:border-accent hover:bg-accent/5 dark:hover:bg-accent/10 transition-colors"
+                          title="Click to assign or manage faculty qualified to teach this subject"
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Users className="h-3.5 w-3.5 text-slate-500 group-hover:text-accent" />
+                          <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-accent">
+                            {assigned.length > 0 ? `${assigned.length} assigned` : 'Assign faculty'}
+                          </span>
                         </button>
-                        <button
-                          onClick={() => setDeleteTarget(s)}
-                          className="rounded p-1 text-slate-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400"
-                          title="Delete Subject"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1 max-w-xs">
+                          {s.prerequisites && s.prerequisites.length > 0 ? (
+                            s.prerequisites.map((p) => (
+                              <span
+                                key={p}
+                                className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[11px] font-mono text-slate-700 dark:text-slate-300"
+                              >
+                                {p}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">None</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openAssignFacultyModal(s)}
+                            className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-accent dark:hover:text-accent"
+                            title="Assign Faculty"
+                          >
+                            <UserCheck className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(s)}
+                            className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                            title="Edit Subject"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteTarget(s)}
+                            className="rounded p-1 text-slate-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400"
+                            title="Delete Subject"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -555,6 +625,115 @@ export default function AdminSubjectsPage() {
                 </Button>
                 <Button type="submit" loading={submitting}>
                   {editingSubject ? 'Save Changes' : 'Create Subject'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Faculty to Subject Modal */}
+      {facultyModalOpen && assignSubject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Users className="h-5 w-5 text-accent" />
+                  <span>Assign Faculty to Subject</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">
+                    {assignSubject.subjectCode}
+                  </span>{' '}
+                  — {assignSubject.subjectName} ({assignSubject.course})
+                </p>
+              </div>
+              <button
+                onClick={() => setFacultyModalOpen(false)}
+                className="rounded p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {assignError && (
+              <Alert type="error" className="mb-4">
+                {assignError}
+              </Alert>
+            )}
+
+            <form onSubmit={handleSaveAssignedFaculty} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Select Instructors ({selectedFacultyIds.length} selected)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFacultyIds(facultyList.map((f) => f.id))}
+                      className="text-[11px] text-accent hover:underline font-medium"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-700">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFacultyIds([])}
+                      className="text-[11px] text-slate-500 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-2 max-h-64 overflow-y-auto space-y-1.5 divide-y divide-slate-100 dark:divide-slate-800/50">
+                  {facultyList.length === 0 ? (
+                    <p className="text-xs text-slate-400 p-2 text-center">No faculty members found in the system.</p>
+                  ) : (
+                    facultyList.map((f) => {
+                      const checked = selectedFacultyIds.includes(f.id)
+                      return (
+                        <label
+                          key={f.id}
+                          className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors pt-2 ${
+                            checked
+                              ? 'bg-accent/5 dark:bg-accent/10 border border-accent/30'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-800 border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleFacultySelection(f.id)}
+                              className="rounded border-slate-300 dark:border-slate-700 text-accent focus:ring-accent"
+                            />
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-white">{f.name}</p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                {f.department || 'College of Computer Studies'} · {f.position || 'Faculty'}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[11px] text-slate-400 font-mono">{f.email}</span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  Faculty assigned here will be eligible to teach sections of this subject in the Class Schedules portal.
+                </p>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3 pt-2">
+                <Button variant="secondary" type="button" onClick={() => setFacultyModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" loading={assigningFaculty}>
+                  Save Assignments ({selectedFacultyIds.length})
                 </Button>
               </div>
             </form>
