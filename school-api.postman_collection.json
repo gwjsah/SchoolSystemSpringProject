@@ -1,0 +1,287 @@
+{
+  "info": {
+    "name": "School Management System API",
+    "_postman_id": "f5f59124-7bd0-4dc6-8c4d-9654ef24df41",
+    "description": "Collection of API requests for the School Management System",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Academic Periods & Term Calendar",
+      "item": [
+        {
+          "name": "Get Periods Status / Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/academic-periods/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["academic-periods", "status"]
+            }
+          }
+        },
+        {
+          "name": "Get Active Term Calendar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academic-periods/term/active",
+              "host": ["{{baseUrl}}"],
+              "path": ["academic-periods", "term", "active"]
+            }
+          }
+        },
+        {
+          "name": "List All Term Calendars (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academic-periods/term",
+              "host": ["{{baseUrl}}"],
+              "path": ["academic-periods", "term"]
+            }
+          }
+        },
+        {
+          "name": "Create Term Calendar (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"schoolYear\": \"2026-2027\",\n  \"semester\": \"FIRST\",\n  \"startsAt\": \"2026-08-11\",\n  \"endsAt\": \"2026-12-12\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academic-periods/term",
+              "host": ["{{baseUrl}}"],
+              "path": ["academic-periods", "term"]
+            }
+          }
+        },
+        {
+          "name": "Update Term Calendar (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"schoolYear\": \"2026-2027\",\n  \"semester\": \"FIRST\",\n  \"startsAt\": \"2026-08-11\",\n  \"endsAt\": \"2026-12-15\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/academic-periods/term/{{termId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["academic-periods", "term", "{{termId}}"]
+            }
+          }
+        },
+        {
+          "name": "Activate Term Calendar (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academic-periods/term/{{termId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["academic-periods", "term", "{{termId}}", "activate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Faculty Attendance",
+      "item": [
+        {
+          "name": "List Generated & Recorded Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/sections/{{sectionId}}/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "sections", "{{sectionId}}", "sessions"]
+            }
+          }
+        },
+        {
+          "name": "Get Session Roster For Date",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/sections/{{sectionId}}/sessions/{{date}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "sections", "{{sectionId}}", "sessions", "{{date}}"]
+            }
+          }
+        },
+        {
+          "name": "Save Attendance For Date",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"studentId\": \"{{studentId}}\",\n      \"status\": \"PRESENT\",\n      \"remarks\": \"On time\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/sections/{{sectionId}}/sessions/{{date}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "sections", "{{sectionId}}", "sessions", "{{date}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Makeup Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-10-24\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/attendance/sections/{{sectionId}}/sessions/makeup",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "sections", "{{sectionId}}", "sessions", "makeup"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Session",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/sections/{{sectionId}}/sessions/{{date}}/cancel?force=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "sections", "{{sectionId}}", "sessions", "{{date}}", "cancel"],
+              "query": [
+                {
+                  "key": "force",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Restore Session",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/sections/{{sectionId}}/sessions/{{date}}/restore",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "sections", "{{sectionId}}", "sessions", "{{date}}", "restore"]
+            }
+          }
+        },
+        {
+          "name": "Get Attendance Record Sheet",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/attendance/sections/{{sectionId}}/sheet",
+              "host": ["{{baseUrl}}"],
+              "path": ["attendance", "sections", "{{sectionId}}", "sheet"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+

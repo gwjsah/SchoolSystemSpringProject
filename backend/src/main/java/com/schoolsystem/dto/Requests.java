@@ -40,7 +40,8 @@ public final class Requests {
             @NotNull Schedule.Day day,
             @NotNull LocalTime startTime,
             @NotNull LocalTime endTime,
-            @NotBlank String roomId) {}
+            String roomId,
+            RoomType slotType) {}
 
     public record SubjectRequest(
             @NotBlank(message = "Subject code is required") String subjectCode,
@@ -55,10 +56,14 @@ public final class Requests {
 
     /** subjectCode is only used when creating a section. */
     public record SectionRequest(
+            String sectionCode,
             String subjectCode,
             @NotBlank String facultyId,
             @Positive int capacity,
             @NotEmpty @Valid List<ScheduleRequest> schedules) {}
+
+    public record BulkSectionRequest(
+            @NotEmpty List<@Valid SectionRequest> sections) {}
 
     public record AddToCartRequest(@NotBlank String sectionId) {}
 
@@ -198,4 +203,33 @@ public final class Requests {
             @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(5) int professionalism,
             @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(5) int studentEngagement,
             String comments) {}
+
+    public record CreateTermCalendarRequest(
+            @NotBlank(message = "School year is required") String schoolYear,
+            @NotNull(message = "Semester is required") com.schoolsystem.entity.enums.Semester semester,
+            @NotNull(message = "Start date is required") java.time.LocalDate startsAt,
+            @NotNull(message = "End date is required") java.time.LocalDate endsAt) {}
+
+    public record UpdateTermCalendarRequest(
+            @NotBlank(message = "School year is required") String schoolYear,
+            @NotNull(message = "Semester is required") com.schoolsystem.entity.enums.Semester semester,
+            @NotNull(message = "Start date is required") java.time.LocalDate startsAt,
+            @NotNull(message = "End date is required") java.time.LocalDate endsAt) {}
+
+    public record AttendanceRecordItemRequest(
+            @NotBlank(message = "Student ID is required") String studentId,
+            @NotNull(message = "Attendance status is required") com.schoolsystem.entity.enums.AttendanceStatus status,
+            String remarks) {}
+
+    public record SaveAttendanceRequest(
+            @NotNull(message = "Records list is required")
+            @jakarta.validation.Valid
+            java.util.List<AttendanceRecordItemRequest> records) {}
+
+    public record CreateMakeupSessionRequest(
+            @NotNull(message = "Date is required") java.time.LocalDate date) {}
+
+    public record CancelSessionRequest(
+            Boolean force) {}
 }
+

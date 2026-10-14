@@ -59,14 +59,28 @@ public class SectionController {
     @ResponseStatus(HttpStatus.CREATED)
     public SectionDto create(@Valid @RequestBody SectionRequest r) {
         return DtoMapper.section(sectionService.createSection(
-                r.subjectCode(), r.facultyId(), r.capacity(), toSlots(r.schedules())));
+                r.sectionCode(), r.subjectCode(), r.facultyId(), r.capacity(), toSlots(r.schedules())));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public SectionDto update(@PathVariable String id, @Valid @RequestBody SectionRequest r) {
         return DtoMapper.section(sectionService.updateSection(
-                id, r.facultyId(), r.capacity(), toSlots(r.schedules())));
+                id, r.sectionCode(), r.facultyId(), r.capacity(), toSlots(r.schedules())));
+    }
+
+    @PostMapping("/bulk/validate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public com.schoolsystem.dto.Responses.BulkValidationResponse validateBulk(@Valid @RequestBody com.schoolsystem.dto.Requests.BulkSectionRequest r) {
+        return sectionService.validateBulkSections(r.sections());
+    }
+
+    @PostMapping("/bulk")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public List<SectionDto> createBulk(@Valid @RequestBody com.schoolsystem.dto.Requests.BulkSectionRequest r) {
+        return sectionService.createBulkSections(r.sections()).stream()
+                .map(DtoMapper::section).toList();
     }
 
     @DeleteMapping("/{id}")
@@ -78,7 +92,7 @@ public class SectionController {
 
     private static List<ScheduleSlot> toSlots(List<ScheduleRequest> schedules) {
         return schedules.stream()
-                .map(s -> new ScheduleSlot(s.day(), s.startTime(), s.endTime(), s.roomId()))
+                .map(s -> new ScheduleSlot(s.day(), s.startTime(), s.endTime(), s.roomId(), s.slotType()))
                 .toList();
     }
 }

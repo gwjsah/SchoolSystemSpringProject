@@ -9,11 +9,11 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
-  Table,
 } from '../../components/ui'
 import { formatDate, formatSchedules, formatTerm, labelize } from '../../lib/format'
 
@@ -30,6 +30,139 @@ function groupByTerm(enrollments) {
     group.latest = Math.max(group.latest, new Date(e.enrolledAt).getTime() || 0)
   }
   return [...groups.values()].sort((a, b) => b.latest - a.latest)
+}
+
+function sortSubjects(items, sortKey, sortDir, sortType) {
+  if (!sortKey || !sortDir) return items
+
+  return [...items].sort((a, b) => {
+    let valA = a[sortKey]
+    let valB = b[sortKey]
+
+    if (sortKey === 'subjectCode') {
+      valA = `${a.subjectCode || ''} ${a.subjectName || ''}`
+      valB = `${b.subjectCode || ''} ${b.subjectName || ''}`
+    }
+
+    const isMissingA = valA === null || valA === undefined || valA === ''
+    const isMissingB = valB === null || valB === undefined || valB === ''
+
+    if (isMissingA && isMissingB) return 0
+    if (isMissingA) return 1
+    if (isMissingB) return -1
+
+    if (sortType === 'number') {
+      const numA = Number(valA)
+      const numB = Number(valB)
+      return sortDir === 'asc' ? numA - numB : numB - numA
+    } else {
+      const strA = String(valA)
+      const strB = String(valB)
+      const comp = strA.localeCompare(strB, undefined, { sensitivity: 'base' })
+      return sortDir === 'asc' ? comp : -comp
+    }
+  })
+}
+
+function TermSubjectsTable({ term, index, sectionById, sectionsLoading, onDrop }) {
+  const [sortKey, setSortKey] = useState(null)
+  const [sortDir, setSortDir] = useState(null)
+  const [sortType, setSortType] = useState('text')
+
+  const handleToggleSort = (key, type) => {
+    if (sortKey === key) {
+      if (sortDir === 'asc') {
+        setSortDir('desc')
+      } else if (sortDir === 'desc') {
+        setSortKey(null)
+        setSortDir(null)
+      }
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+      setSortType(type)
+    }
+  }
+
+  const sortedItems = sortSubjects(term.items, sortKey, sortDir, sortType)
+  const activeUnits = term.items.filter(isActive).reduce((sum, e) => sum + e.units, 0)
+
+  return (
+    <Card
+      key={`${term.schoolYear}-${term.semester}`}
+      title={formatTerm(term.semester, term.schoolYear)}
+      actions={
+        <span className="text-sm text-slate-500 dark:text-slate-400">
+          {activeUnits} units{index === 0 && ' · current'}
+        </span>
+      }
+      bodyClassName="p-0 overflow-hidden"
+    >
+      <DataTable
+        columns={[
+          { key: 'subjectCode', label: 'Subject', sortable: true, sortType: 'text' },
+          { key: 'sectionCode', label: 'Section', sortable: true, sortType: 'text' },
+          { key: 'schedule', label: 'Schedule' },
+          { key: 'units', label: 'Units', sortable: true, sortType: 'number' },
+          { key: 'status', label: 'Status', sortable: true, sortType: 'text' },
+          { key: 'actions', label: '', align: 'right' },
+        ]}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={handleToggleSort}
+      >
+        {sortedItems.map((e) => {
+          const section = sectionById.get(e.sectionId)
+          return (
+            <tr
+              key={e.id}
+              className={
+                e.status === 'DROPPED'
+                  ? 'text-slate-400 dark:text-slate-500 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors'
+                  : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors'
+              }
+            >
+              <td className="px-4 py-3">
+                <p className="font-medium text-slate-900 dark:text-white">{e.subjectCode}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{e.subjectName}</p>
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 font-mono">{e.sectionCode}</td>
+              <td className="px-4 py-3">
+                {section ? (
+                  <div className="space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
+                    {formatSchedules(section.schedules).map((line) => (
+                      <p key={line} className="flex items-center gap-1.5 whitespace-nowrap">
+                        <Clock className="h-3.5 w-3.5 shrink-0" /> {line}
+                      </p>
+                    ))}
+                    {section.facultyName && (
+                      <p className="flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5 shrink-0" /> {section.facultyName}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-400 dark:text-slate-500">{sectionsLoading ? 'Loading…' : '—'}</span>
+                )}
+              </td>
+              <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{e.units}</td>
+              <td className="px-4 py-3">
+                <Badge value={e.status}>{labelize(e.status)}</Badge>
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{formatDate(e.enrolledAt)}</p>
+              </td>
+              <td className="px-4 py-3 text-right">
+                {isActive(e) && (
+                  <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40" onClick={() => onDrop(e)}>
+                    Drop
+                  </Button>
+                )}
+              </td>
+            </tr>
+          )
+        })}
+      </DataTable>
+    </Card>
+  )
 }
 
 export default function MySubjectsPage() {
@@ -82,66 +215,16 @@ export default function MySubjectsPage() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {terms.map((term, index) => {
-            const activeUnits = term.items.filter(isActive).reduce((sum, e) => sum + e.units, 0)
-            return (
-              <Card
-                key={`${term.schoolYear}-${term.semester}`}
-                title={formatTerm(term.semester, term.schoolYear)}
-                actions={
-                  <span className="text-sm text-slate-500 dark:text-slate-400">
-                    {activeUnits} units{index === 0 && ' · current'}
-                  </span>
-                }
-                bodyClassName=""
-              >
-                <Table columns={['Subject', 'Section', 'Schedule', 'Units', 'Status', { label: '', align: 'right' }]}>
-                  {term.items.map((e) => {
-                    const section = sectionById.get(e.sectionId)
-                    return (
-                      <tr key={e.id} className={e.status === 'DROPPED' ? 'text-slate-400 dark:text-slate-500' : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/40'}>
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-slate-900 dark:text-white">{e.subjectCode}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{e.subjectName}</p>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 font-mono">{e.sectionCode}</td>
-                        <td className="px-4 py-3">
-                          {section ? (
-                            <div className="space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
-                              {formatSchedules(section.schedules).map((line) => (
-                                <p key={line} className="flex items-center gap-1.5 whitespace-nowrap">
-                                  <Clock className="h-3.5 w-3.5 shrink-0" /> {line}
-                                </p>
-                              ))}
-                              {section.facultyName && (
-                                <p className="flex items-center gap-1.5">
-                                  <User className="h-3.5 w-3.5 shrink-0" /> {section.facultyName}
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-400 dark:text-slate-500">{sections.loading ? 'Loading…' : '—'}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{e.units}</td>
-                        <td className="px-4 py-3">
-                          <Badge value={e.status}>{labelize(e.status)}</Badge>
-                          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{formatDate(e.enrolledAt)}</p>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {isActive(e) && (
-                            <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40" onClick={() => setToDrop(e)}>
-                              Drop
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </Table>
-              </Card>
-            )
-          })}
+          {terms.map((term, index) => (
+            <TermSubjectsTable
+              key={`${term.schoolYear}-${term.semester}`}
+              term={term}
+              index={index}
+              sectionById={sectionById}
+              sectionsLoading={sections.loading}
+              onDrop={(item) => setToDrop(item)}
+            />
+          ))}
         </div>
       )}
 
@@ -162,4 +245,3 @@ export default function MySubjectsPage() {
     </div>
   )
 }
-

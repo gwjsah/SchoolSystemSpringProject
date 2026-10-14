@@ -9,4 +9,6 @@ import java.util.Optional;
 public interface RoomRepository extends JpaRepository<Room, String> {
 
     Optional<Room> findByRoomNameIgnoreCase(String roomName);
+    List<Room> findByIsActiveTrue();
+    List<Room> findByIsActiveTrueAndRoomType(com.schoolsystem.entity.enums.RoomType roomType);
 }

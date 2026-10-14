@@ -14,11 +14,14 @@ import {
   Radio,
   Award,
   UserPlus,
+  Pencil,
+  Sparkles,
 } from 'lucide-react'
 import api, { getErrorMessage } from '../api/client'
 import { useApi } from '../hooks/useApi'
 import { Button, Badge, Card, ConfirmDialog, Alert, inputClass, Field, Table } from './ui'
-import { formatDate, formatTerm, SEMESTER_LABEL } from '../lib/format'
+import { DataTable } from './common/DataTable'
+import { formatDate, formatLocalDate, formatTerm, SEMESTER_LABEL } from '../lib/format'
 
 function toDatetimeLocal(d) {
   const pad = (n) => String(n).padStart(2, '0')
@@ -88,6 +91,175 @@ export default function AcademicPeriodsWidget() {
   const activeAdmission = statusApi.data?.activeAdmissionPeriod
   const activeGrading = statusApi.data?.activeGradingPeriod
   const activeEvaluation = statusApi.data?.activeEvaluationPeriod
+  const activeTerm = statusApi.data?.activeTerm
+
+  const [termModalOpen, setTermModalOpen] = useState(false)
+  const [termLoading, setTermLoading] = useState(false)
+  const [termError, setTermError] = useState('')
+  const [termSuccess, setTermSuccess] = useState('')
+  const [termsList, setTermsList] = useState([])
+  const [termForm, setTermForm] = useState({
+    id: null,
+    schoolYear: '2026-2027',
+    semester: 'FIRST',
+    startsAt: '',
+    endsAt: '',
+  })
+  const [isEditingTerm, setIsEditingTerm] = useState(false)
+  const [activateConfirm, setActivateConfirm] = useState({ open: false, term: null })
+
+  const [editRecordModal, setEditRecordModal] = useState({ open: false, term: null })
+  const [editRecordForm, setEditRecordForm] = useState({
+    id: null,
+    schoolYear: '2026-2027',
+    semester: 'FIRST',
+    startsAt: '',
+    endsAt: '',
+  })
+  const [editRecordError, setEditRecordError] = useState('')
+  const [editRecordBusy, setEditRecordBusy] = useState(false)
+
+  const openEditRecordModal = (term) => {
+    setEditRecordError('')
+    setEditRecordForm({
+      id: term.id,
+      schoolYear: term.schoolYear,
+      semester: term.semester,
+      startsAt: term.startsAt || '',
+      endsAt: term.endsAt || '',
+    })
+    setEditRecordModal({ open: true, term })
+  }
+
+  const handleUpdateRecordTerm = async (e) => {
+    e.preventDefault()
+    if (!editRecordForm.id) return
+    setEditRecordError('')
+    setEditRecordBusy(true)
+    try {
+      await api.put(`/academic-periods/term/${editRecordForm.id}`, {
+        schoolYear: editRecordForm.schoolYear.trim(),
+        semester: editRecordForm.semester,
+        startsAt: editRecordForm.startsAt,
+        endsAt: editRecordForm.endsAt,
+      })
+      setEditRecordModal({ open: false, term: null })
+      setTermSuccess('Academic term updated successfully.')
+      statusApi.reload()
+      loadTerms()
+    } catch (err) {
+      setEditRecordError(getErrorMessage(err))
+    } finally {
+      setEditRecordBusy(false)
+    }
+  }
+
+  const loadTerms = async () => {
+    try {
+      setTermLoading(true)
+      const res = await api.get('/academic-periods/term')
+      setTermsList(res.data || [])
+    } catch (err) {
+      console.error('Failed to load terms:', err)
+      setTermError(getErrorMessage(err))
+    } finally {
+      setTermLoading(false)
+    }
+  }
+
+  const openTermModalForEdit = (term) => {
+    setTermError('')
+    setTermSuccess('')
+    if (term) {
+      setTermForm({
+        id: term.id,
+        schoolYear: term.schoolYear,
+        semester: term.semester,
+        startsAt: term.startsAt || '',
+        endsAt: term.endsAt || '',
+      })
+      setIsEditingTerm(true)
+    } else {
+      openTermModalForNew()
+      return
+    }
+    setTermModalOpen(true)
+    loadTerms()
+  }
+
+  const openTermModalForNew = () => {
+    setTermError('')
+    setTermSuccess('')
+    const today = new Date().toISOString().slice(0, 10)
+    const inFourMonths = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    setTermForm({
+      id: null,
+      schoolYear: activeTerm ? activeTerm.schoolYear : '2026-2027',
+      semester: activeTerm
+        ? activeTerm.semester === 'FIRST'
+          ? 'SECOND'
+          : activeTerm.semester === 'SECOND'
+          ? 'SUMMER'
+          : 'FIRST'
+        : 'FIRST',
+      startsAt: today,
+      endsAt: inFourMonths,
+    })
+    setIsEditingTerm(false)
+    setTermModalOpen(true)
+    loadTerms()
+  }
+
+  const handleSaveTerm = async (e) => {
+    e.preventDefault()
+    setTermError('')
+    setTermSuccess('')
+    setBusy(true)
+    try {
+      if (isEditingTerm && termForm.id) {
+        await api.put(`/academic-periods/term/${termForm.id}`, {
+          schoolYear: termForm.schoolYear.trim(),
+          semester: termForm.semester,
+          startsAt: termForm.startsAt,
+          endsAt: termForm.endsAt,
+        })
+        setTermSuccess('Term calendar updated successfully.')
+      } else {
+        await api.post('/academic-periods/term', {
+          schoolYear: termForm.schoolYear.trim(),
+          semester: termForm.semester,
+          startsAt: termForm.startsAt,
+          endsAt: termForm.endsAt,
+        })
+        setTermSuccess('Term calendar created successfully. You can activate it below.')
+        setIsEditingTerm(false)
+      }
+      statusApi.reload()
+      loadTerms()
+    } catch (err) {
+      setTermError(getErrorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleActivateTerm = async () => {
+    if (!activateConfirm.term) return
+    setTermError('')
+    setTermSuccess('')
+    setBusy(true)
+    try {
+      await api.patch(`/academic-periods/term/${activateConfirm.term.id}/activate`)
+      setActionSuccess(`Term A.Y. ${activateConfirm.term.schoolYear} ${SEMESTER_LABEL[activateConfirm.term.semester] || activateConfirm.term.semester} is now active.`)
+      setActivateConfirm({ open: false, term: null })
+      statusApi.reload()
+      loadTerms()
+    } catch (err) {
+      setTermError(getErrorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const handleOpenEnrollment = async (e) => {
     e.preventDefault()
@@ -258,6 +430,71 @@ export default function AcademicPeriodsWidget() {
     }
   }
 
+  const termTableColumns = [
+    {
+      key: 'term',
+      header: 'Academic Term',
+      render: (row) => (
+        <div className="font-semibold text-slate-800 dark:text-slate-100">
+          A.Y. {row.schoolYear} &middot; {SEMESTER_LABEL[row.semester] ?? row.semester}
+        </div>
+      ),
+    },
+    {
+      key: 'dates',
+      header: 'Class Duration',
+      render: (row) => (
+        <span className="text-xs text-slate-600 dark:text-slate-300">
+          {formatLocalDate(row.startsAt)} &rarr; {formatLocalDate(row.endsAt)}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      align: 'center',
+      render: (row) =>
+        row.isActive ? (
+          <Badge tone="green">
+            <span className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              ACTIVE
+            </span>
+          </Badge>
+        ) : (
+          <Badge tone="slate">Inactive</Badge>
+        ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (row) => (
+        <div className="flex items-center justify-end gap-1.5">
+          {!row.isActive && (
+            <Button
+              size="xs"
+              variant="secondary"
+              onClick={() => setActivateConfirm({ open: true, term: row })}
+              title="Make this the active term"
+            >
+              Activate
+            </Button>
+          )}
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={() => openEditRecordModal(row)}
+            title="Edit term dates"
+          >
+            <Pencil className="h-3 w-3 mr-1" />
+            <span>Edit</span>
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <>
       <Card
@@ -289,97 +526,79 @@ export default function AcademicPeriodsWidget() {
           </Alert>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Enrollment Period Block */}
-          <div className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition-all">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
+        {/* ── CURRENT TERM BANNER ───────────────────────────────────────── */}
+        {activeTerm ? (
+          <div className="mb-5 rounded-xl border border-slate-200 dark:border-slate-700/60 bg-gradient-to-r from-slate-50 via-indigo-50/30 to-slate-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-5 shadow-xs transition-all">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <div className={`rounded-lg p-2 ${activeEnrollment?.isOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
-                    <Calendar className="h-4 w-4" />
-                  </div>
-                  <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Enrollment Period</h3>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-accent/10 dark:bg-accent/20 text-accent border border-accent/20 dark:border-accent/30">
+                    <Sparkles className="h-3 w-3" />
+                    CURRENT TERM
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Academic Calendar</span>
                 </div>
-                {activeEnrollment?.isOpen ? (
-                  <Badge tone="green">
-                    <span className="flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      OPEN
-                    </span>
-                  </Badge>
-                ) : (
-                  <Badge tone="slate">CLOSED</Badge>
-                )}
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>A.Y. {activeTerm.schoolYear}</span>
+                  <span className="text-slate-300 dark:text-slate-600 font-normal">|</span>
+                  <span className="text-slate-700 dark:text-slate-200">{SEMESTER_LABEL[activeTerm.semester] ?? activeTerm.semester}</span>
+                </h2>
+                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <Clock className="h-3.5 w-3.5 text-accent shrink-0" />
+                  <span>
+                    Classes:{' '}
+                    <span className="font-semibold text-slate-900 dark:text-white">{formatLocalDate(activeTerm.startsAt)}</span>
+                    {' '}&rarr;{' '}
+                    <span className="font-semibold text-slate-900 dark:text-white">{formatLocalDate(activeTerm.endsAt)}</span>
+                  </span>
+                </div>
               </div>
 
-              {activeEnrollment?.isOpen ? (
-                <div className="space-y-2 rounded-lg bg-white dark:bg-slate-900/80 p-3 border border-slate-200/80 dark:border-slate-800">
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                    {formatTerm(activeEnrollment.semester, activeEnrollment.schoolYear)}
-                  </p>
-                  <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
-                    <div className="flex items-center gap-1.5 whitespace-nowrap">
-                      <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span>Starts: {formatDate(activeEnrollment.startsAt, true)}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 whitespace-nowrap">
-                      <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span>Ends: {formatDate(activeEnrollment.endsAt, true)}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-lg bg-white dark:bg-slate-900/80 p-3 border border-slate-200/80 dark:border-slate-800">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    No active enrollment period.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-end gap-2">
-              {activeEnrollment?.isOpen ? (
-                <>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    className="flex-1"
-                    onClick={() => setCloseEnrollmentDialog(true)}
-                  >
-                    <Lock className="h-3.5 w-3.5" />
-                    <span>Close Enrollment</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    title="Open New Term"
-                    onClick={() => {
-                      setEnrollmentForm((prev) => ({
-                        ...prev,
-                        schoolYear: activeEnrollment.schoolYear,
-                        semester: activeEnrollment.semester === 'FIRST' ? 'SECOND' : activeEnrollment.semester === 'SECOND' ? 'SUMMER' : 'FIRST',
-                      }))
-                      setOpenEnrollmentModal(true)
-                    }}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </Button>
-                </>
-              ) : (
+              <div className="flex items-center gap-2 shrink-0">
                 <Button
+                  variant="secondary"
                   size="sm"
-                  variant="primary"
-                  className="w-full"
-                  onClick={() => setOpenEnrollmentModal(true)}
+                  onClick={() => openTermModalForEdit(activeTerm)}
+                  className="bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-white border-slate-300 dark:border-white/20 shadow-xs transition-colors"
                 >
-                  <Unlock className="h-3.5 w-3.5" />
-                  <span>Open Enrollment Period</span>
+                  <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                  <span>Edit</span>
                 </Button>
-              )}
+              </div>
             </div>
           </div>
+        ) : (
+          <div className="mb-5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 p-5 transition-all">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                    CURRENT TERM
+                  </span>
+                </div>
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                  No active term set
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Define an academic year, semester, and class dates to establish the current school calendar.
+                </p>
+              </div>
 
-          {/* Admission Period Block */}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => openTermModalForNew()}
+                className="shrink-0"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                <span>Set up term</span>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* 1. Admission Period Block */}
           <div className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition-all">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -468,17 +687,17 @@ export default function AcademicPeriodsWidget() {
             </div>
           </div>
 
-          {/* Grading Period Block */}
+          {/* 2. Enrollment Period Block */}
           <div className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition-all">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`rounded-lg p-2 ${activeGrading?.isOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
-                    <GraduationCap className="h-4 w-4" />
+                  <div className={`rounded-lg p-2 ${activeEnrollment?.isOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                    <Calendar className="h-4 w-4" />
                   </div>
-                  <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Grading<br/>Period</h3>
+                  <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Enrollment Period</h3>
                 </div>
-                {activeGrading?.isOpen ? (
+                {activeEnrollment?.isOpen ? (
                   <Badge tone="green">
                     <span className="flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -490,52 +709,54 @@ export default function AcademicPeriodsWidget() {
                 )}
               </div>
 
-              {activeGrading?.isOpen ? (
+              {activeEnrollment?.isOpen ? (
                 <div className="space-y-2 rounded-lg bg-white dark:bg-slate-900/80 p-3 border border-slate-200/80 dark:border-slate-800">
                   <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                    {formatTerm(activeGrading.semester, activeGrading.schoolYear)}
+                    {formatTerm(activeEnrollment.semester, activeEnrollment.schoolYear)}
                   </p>
                   <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <span>
-                        Deadline: {activeGrading.deadline ? formatDate(activeGrading.deadline, true) : 'No strict deadline set'}
-                      </span>
+                      <span>Starts: {formatDate(activeEnrollment.startsAt, true)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <span>Ends: {formatDate(activeEnrollment.endsAt, true)}</span>
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-lg bg-white dark:bg-slate-900/80 p-3 border border-slate-200/80 dark:border-slate-800">
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    No active grading period.
+                    No active enrollment period.
                   </p>
                 </div>
               )}
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-end gap-2">
-              {activeGrading?.isOpen ? (
+              {activeEnrollment?.isOpen ? (
                 <>
                   <Button
                     size="sm"
                     variant="danger"
                     className="flex-1"
-                    onClick={() => setCloseGradingDialog(true)}
+                    onClick={() => setCloseEnrollmentDialog(true)}
                   >
                     <Lock className="h-3.5 w-3.5" />
-                    <span>Close Grading</span>
+                    <span>Close Enrollment</span>
                   </Button>
                   <Button
                     size="sm"
                     variant="secondary"
                     title="Open New Term"
                     onClick={() => {
-                      setGradingForm((prev) => ({
+                      setEnrollmentForm((prev) => ({
                         ...prev,
-                        schoolYear: activeGrading.schoolYear,
-                        semester: activeGrading.semester === 'FIRST' ? 'SECOND' : activeGrading.semester === 'SECOND' ? 'SUMMER' : 'FIRST',
+                        schoolYear: activeEnrollment.schoolYear,
+                        semester: activeEnrollment.semester === 'FIRST' ? 'SECOND' : activeEnrollment.semester === 'SECOND' ? 'SUMMER' : 'FIRST',
                       }))
-                      setOpenGradingModal(true)
+                      setOpenEnrollmentModal(true)
                     }}
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -546,16 +767,16 @@ export default function AcademicPeriodsWidget() {
                   size="sm"
                   variant="primary"
                   className="w-full"
-                  onClick={() => setOpenGradingModal(true)}
+                  onClick={() => setOpenEnrollmentModal(true)}
                 >
                   <Unlock className="h-3.5 w-3.5" />
-                  <span>Open GradingPeriod</span>
+                  <span>Open Enrollment Period</span>
                 </Button>
               )}
             </div>
           </div>
 
-          {/* Faculty Evaluation Period Block */}
+          {/* 3. Faculty Evaluation Period Block */}
           <div className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition-all">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -643,8 +864,377 @@ export default function AcademicPeriodsWidget() {
               )}
             </div>
           </div>
+
+          {/* 4. Grading Period Block */}
+          <div className="flex flex-col justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 transition-all">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`rounded-lg p-2 ${activeGrading?.isOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                    <GraduationCap className="h-4 w-4" />
+                  </div>
+                  <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Grading<br/>Period</h3>
+                </div>
+                {activeGrading?.isOpen ? (
+                  <Badge tone="green">
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      OPEN
+                    </span>
+                  </Badge>
+                ) : (
+                  <Badge tone="slate">CLOSED</Badge>
+                )}
+              </div>
+
+              {activeGrading?.isOpen ? (
+                <div className="space-y-2 rounded-lg bg-white dark:bg-slate-900/80 p-3 border border-slate-200/80 dark:border-slate-800">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                    {formatTerm(activeGrading.semester, activeGrading.schoolYear)}
+                  </p>
+                  <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <span>
+                        Deadline: {activeGrading.deadline ? formatDate(activeGrading.deadline, true) : 'No strict deadline set'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-white dark:bg-slate-900/80 p-3 border border-slate-200/80 dark:border-slate-800">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    No active grading period.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-end gap-2">
+              {activeGrading?.isOpen ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    className="flex-1"
+                    onClick={() => setCloseGradingDialog(true)}
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    <span>Close Grading</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    title="Open New Term"
+                    onClick={() => {
+                      setGradingForm((prev) => ({
+                        ...prev,
+                        schoolYear: activeGrading.schoolYear,
+                        semester: activeGrading.semester === 'FIRST' ? 'SECOND' : activeGrading.semester === 'SECOND' ? 'SUMMER' : 'FIRST',
+                      }))
+                      setOpenGradingModal(true)
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  className="w-full"
+                  onClick={() => setOpenGradingModal(true)}
+                >
+                  <Unlock className="h-3.5 w-3.5" />
+                  <span>Open GradingPeriod</span>
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </Card>
+
+      {/* ── Modal: Term Calendar (Edit / Create & Other Terms) ────── */}
+      {termModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !busy && setTermModalOpen(false)} />
+          <div role="dialog" aria-modal="true" className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl transition-colors">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-accent" />
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  {isEditingTerm ? 'Edit Term Calendar' : 'Set Up Term Calendar'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => !busy && setTermModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {termError && (
+              <Alert type="error" className="mt-4" onClose={() => setTermError('')}>
+                {termError}
+              </Alert>
+            )}
+            {termSuccess && (
+              <Alert type="success" className="mt-4" onClose={() => setTermSuccess('')}>
+                {termSuccess}
+              </Alert>
+            )}
+
+            {/* Term Form */}
+            <form onSubmit={handleSaveTerm} className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="School Year" htmlFor="tc-schoolYear" hint="e.g. 2026-2027">
+                  <input
+                    id="tc-schoolYear"
+                    type="text"
+                    value={termForm.schoolYear}
+                    onChange={(e) => setTermForm({ ...termForm, schoolYear: e.target.value })}
+                    placeholder="2026-2027"
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+
+                <Field label="Semester" htmlFor="tc-semester">
+                  <select
+                    id="tc-semester"
+                    value={termForm.semester}
+                    onChange={(e) => setTermForm({ ...termForm, semester: e.target.value })}
+                    className={inputClass}
+                    required
+                  >
+                    <option value="FIRST">1st Semester</option>
+                    <option value="SECOND">2nd Semester</option>
+                    <option value="SUMMER">Summer</option>
+                  </select>
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Class Start Date" htmlFor="tc-startsAt">
+                  <input
+                    id="tc-startsAt"
+                    type="date"
+                    value={termForm.startsAt}
+                    onChange={(e) => setTermForm({ ...termForm, startsAt: e.target.value })}
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+
+                <Field label="Class End Date" htmlFor="tc-endsAt">
+                  <input
+                    id="tc-endsAt"
+                    type="date"
+                    value={termForm.endsAt}
+                    onChange={(e) => setTermForm({ ...termForm, endsAt: e.target.value })}
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                {isEditingTerm && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={openTermModalForNew}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    <span>Create New Term Instead</span>
+                  </Button>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setTermModalOpen(false)}
+                    disabled={busy}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    loading={busy}
+                  >
+                    {isEditingTerm ? 'Update Term' : 'Save Term'}
+                  </Button>
+                </div>
+              </div>
+            </form>
+
+            {/* Other Recorded Terms Table */}
+            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                    All Recorded Terms
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Switch the active academic calendar or edit term dates.
+                  </p>
+                </div>
+                {termLoading && (
+                  <span className="text-xs text-slate-400">Loading terms...</span>
+                )}
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                <DataTable
+                  columns={termTableColumns}
+                  data={termsList}
+                  keyField="id"
+                  loading={termLoading}
+                  emptyMessage="No terms recorded yet."
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Specific Term Record */}
+      {editRecordModal.open && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => !editRecordBusy && setEditRecordModal({ open: false, term: null })}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-lg rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl transition-colors"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-accent" />
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Edit Academic Term
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Update school year, semester, or class schedule dates.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !editRecordBusy && setEditRecordModal({ open: false, term: null })}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {editRecordError && (
+              <Alert type="error" className="mt-4" onClose={() => setEditRecordError('')}>
+                {editRecordError}
+              </Alert>
+            )}
+
+            <form onSubmit={handleUpdateRecordTerm} className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="School Year" htmlFor="edit-tc-schoolYear" hint="e.g. 2026-2027">
+                  <input
+                    id="edit-tc-schoolYear"
+                    type="text"
+                    value={editRecordForm.schoolYear}
+                    onChange={(e) => setEditRecordForm({ ...editRecordForm, schoolYear: e.target.value })}
+                    placeholder="2026-2027"
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+
+                <Field label="Semester" htmlFor="edit-tc-semester">
+                  <select
+                    id="edit-tc-semester"
+                    value={editRecordForm.semester}
+                    onChange={(e) => setEditRecordForm({ ...editRecordForm, semester: e.target.value })}
+                    className={inputClass}
+                    required
+                  >
+                    <option value="FIRST">1st Semester</option>
+                    <option value="SECOND">2nd Semester</option>
+                    <option value="SUMMER">Summer</option>
+                  </select>
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Class Start Date" htmlFor="edit-tc-startsAt">
+                  <input
+                    id="edit-tc-startsAt"
+                    type="date"
+                    value={editRecordForm.startsAt}
+                    onChange={(e) => setEditRecordForm({ ...editRecordForm, startsAt: e.target.value })}
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+
+                <Field label="Class End Date" htmlFor="edit-tc-endsAt">
+                  <input
+                    id="edit-tc-endsAt"
+                    type="date"
+                    value={editRecordForm.endsAt}
+                    onChange={(e) => setEditRecordForm({ ...editRecordForm, endsAt: e.target.value })}
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setEditRecordModal({ open: false, term: null })}
+                  disabled={editRecordBusy}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={editRecordBusy}
+                >
+                  Save Changes
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      <ConfirmDialog
+        open={activateConfirm.open}
+        title="Activate Academic Term"
+        confirmLabel="Activate Term"
+        variant="primary"
+        loading={busy}
+        onConfirm={handleActivateTerm}
+        onCancel={() => setActivateConfirm({ open: false, term: null })}
+      >
+        <p>
+          Are you sure you want to activate{' '}
+          <strong>
+            {activateConfirm.term && `A.Y. ${activateConfirm.term.schoolYear} ${SEMESTER_LABEL[activateConfirm.term.semester] || activateConfirm.term.semester}`}
+          </strong>
+          ?
+        </p>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          This will designate it as the current active academic term across the system and deactivate the previous active term.
+        </p>
+      </ConfirmDialog>
 
       {/* Modal: Open Enrollment Period */}
       {openEnrollmentModal && (

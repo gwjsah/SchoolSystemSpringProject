@@ -18,6 +18,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.schoolsystem.entity.Schedule;
+import com.schoolsystem.entity.enums.RoomType;
+import org.springframework.web.bind.annotation.RequestParam;
+import java.time.LocalTime;
 import java.util.List;
 
 @RestController
@@ -30,6 +34,18 @@ public class RoomController {
     @GetMapping
     public List<RoomDto> list() {
         return roomService.getAllRooms().stream().map(DtoMapper::room).toList();
+    }
+
+    @GetMapping("/available")
+    public List<RoomDto> available(
+            @RequestParam Schedule.Day day,
+            @RequestParam LocalTime startTime,
+            @RequestParam LocalTime endTime,
+            @RequestParam(required = false) RoomType roomType,
+            @RequestParam(defaultValue = "1") int minCapacity,
+            @RequestParam(required = false) String excludeSectionId) {
+        return roomService.findAvailableRooms(day, startTime, endTime, roomType, minCapacity, excludeSectionId)
+                .stream().map(DtoMapper::room).toList();
     }
 
     @PostMapping

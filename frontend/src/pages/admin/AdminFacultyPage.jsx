@@ -39,6 +39,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
   EmptyState,
   ErrorState,
   Field,
@@ -648,64 +649,19 @@ export default function AdminFacultyPage() {
         </Card>
       ) : (
         <Card bodyClassName="p-0 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 select-none">
-                  {/* 1. Faculty / Instructor (Name) - sortable */}
-                  <th
-                    onClick={() => toggleSort('name')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Name (${sortField === 'name' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'name'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Faculty / Instructor
-                      </span>
-                      {renderSortIcon('name')}
-                    </div>
-                  </th>
-
-                  {/* 2. Employee ID - sortable */}
-                  <th
-                    onClick={() => toggleSort('employeeNumber')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Employee ID (${sortField === 'employeeNumber' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'employeeNumber'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Employee ID
-                      </span>
-                      {renderSortIcon('employeeNumber')}
-                    </div>
-                  </th>
-
-                  {/* 3. Department & Position - unsorted */}
-                  <th className="px-4 py-3 whitespace-nowrap">Department & Position</th>
-
-                  {/* 4. Assigned Sections - unsorted */}
-                  <th className="px-4 py-3 whitespace-nowrap">Assigned Sections</th>
-
-                  {/* 5. Qualified Subjects - unsorted */}
-                  <th className="px-4 py-3 whitespace-nowrap">Qualified Subjects</th>
-
-                  {/* 6. Actions - unsorted */}
-                  <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          <DataTable
+            columns={[
+              { key: 'name', label: 'Faculty / Instructor', sortable: true, sortType: 'text' },
+              { key: 'employeeNumber', label: 'Employee ID', sortable: true, sortType: 'text' },
+              { key: 'department', label: 'Department & Position' },
+              { key: 'sections', label: 'Assigned Sections' },
+              { key: 'qualified', label: 'Qualified Subjects' },
+              { key: 'actions', label: 'Actions', align: 'right' },
+            ]}
+            sortKey={sortField}
+            sortDir={sortDirection}
+            onSort={(key) => toggleSort(key)}
+          >
             {filteredFaculty.map((f) => {
               const secCount = f.sections?.length || 0
               const subjCount = f.assignedSubjects?.length || 0
@@ -820,10 +776,8 @@ export default function AdminFacultyPage() {
                 </tr>
               )
             })}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+          </DataTable>
+        </Card>
       )}
 
       {/* ===================================================================== */}

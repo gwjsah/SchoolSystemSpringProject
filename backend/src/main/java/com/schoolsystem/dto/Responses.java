@@ -66,7 +66,19 @@ public final class Responses {
 
     public record ScheduleDto(
             String id, Schedule.Day day, LocalTime startTime, LocalTime endTime,
-            String roomId, String roomName) {}
+            String roomId, String roomName, RoomType slotType) {}
+
+    public record BulkValidationItem(
+            String subjectCode,
+            String sectionCode,
+            boolean valid,
+            List<String> errors,
+            List<ScheduleDto> allocatedSchedules) {}
+
+    public record BulkValidationResponse(
+            boolean valid,
+            List<BulkValidationItem> items,
+            List<String> globalErrors) {}
 
     public record SectionDto(
             String id, String sectionCode, String subjectCode, String subjectName, int units,
@@ -161,11 +173,22 @@ public final class Responses {
             LocalDateTime endsAt,
             @JsonProperty("isOpen") boolean isOpen) {}
 
+    public record TermCalendarDto(
+            String id,
+            String schoolYear,
+            Semester semester,
+            LocalDate startsAt,
+            LocalDate endsAt,
+            @JsonProperty("isActive") boolean isActive,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {}
+
     public record AcademicPeriodsStatusDto(
             EnrollmentPeriodDto activeEnrollmentPeriod,
             GradingPeriodDto activeGradingPeriod,
             EvaluationPeriodDto activeEvaluationPeriod,
-            AdmissionPeriodDto activeAdmissionPeriod) {}
+            AdmissionPeriodDto activeAdmissionPeriod,
+            TermCalendarDto activeTerm) {}
 
     public record FacultyEvaluationDto(
             String id,
@@ -219,4 +242,50 @@ public final class Responses {
             double averageStudentEngagement,
             Map<Integer, Long> scoreDistribution,
             List<FacultyEvaluationDto> evaluations) {}
+
+    public record AttendanceSessionDto(
+            String id,
+            String sectionId,
+            LocalDate date,
+            com.schoolsystem.entity.enums.AttendanceType type,
+            com.schoolsystem.entity.enums.AttendanceSessionStatus status,
+            boolean isRecorded,
+            String dayOfWeek) {}
+
+    public record AttendanceStudentDto(
+            String studentId,
+            String studentName,
+            String studentNumber,
+            com.schoolsystem.entity.enums.AttendanceStatus status,
+            String remarks,
+            boolean isDropped) {}
+
+    public record SessionRosterDto(
+            AttendanceSessionDto session,
+            List<AttendanceStudentDto> students,
+            int presentCount,
+            int absentCount,
+            int lateCount) {}
+
+    public record AttendanceSheetCellDto(
+            com.schoolsystem.entity.enums.AttendanceStatus status,
+            String remarks) {}
+
+    public record AttendanceSheetStudentDto(
+            String studentId,
+            String studentName,
+            String studentNumber,
+            Map<String, AttendanceSheetCellDto> attendanceByDate,
+            int presentCount,
+            int absentCount,
+            int lateCount,
+            int heldSessionsCount,
+            Double attendanceRate,
+            boolean isDropped) {}
+
+    public record AttendanceSheetDto(
+            List<AttendanceSessionDto> sessions,
+            List<AttendanceSheetStudentDto> students,
+            int totalHeldSessions) {}
 }
+

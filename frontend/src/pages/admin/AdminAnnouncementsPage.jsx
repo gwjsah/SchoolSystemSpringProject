@@ -5,9 +5,6 @@ import {
   Edit2,
   Archive,
   Trash2,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   RotateCcw,
   Search,
   X,
@@ -21,6 +18,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
   EmptyState,
   ErrorState,
   Field,
@@ -378,30 +376,17 @@ export default function AdminAnnouncementsPage() {
             </div>
 
             {/* Table with column filter controls */}
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    {/* Title & Content column */}
-                    <th className="px-4 py-3 min-w-[260px] align-top">
-                      <div className="flex items-center justify-between gap-1 mb-1.5">
-                        <button
-                          type="button"
-                          onClick={handleToggleTitleSort}
-                          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors cursor-pointer"
-                          title="Click to sort Title A-Z or Z-A"
-                        >
-                          <span>Title & Content</span>
-                          {primarySort === 'title' && titleSort === 'asc' && (
-                            <ArrowUp className="h-3.5 w-3.5 text-primary" />
-                          )}
-                          {primarySort === 'title' && titleSort === 'desc' && (
-                            <ArrowDown className="h-3.5 w-3.5 text-primary" />
-                          )}
-                          {(primarySort !== 'title' || titleSort === 'none') && (
-                            <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 opacity-60" />
-                          )}
-                        </button>
+            <DataTable
+              columns={[
+                {
+                  key: 'title',
+                  headerClassName: 'min-w-[260px] align-top',
+                  headerRender: () => (
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+                        <span className={primarySort === 'title' && titleSort !== 'none' ? 'text-accent font-bold' : ''}>
+                          Title & Content
+                        </span>
                       </div>
                       <select
                         value={titleSort}
@@ -420,10 +405,14 @@ export default function AdminAnnouncementsPage() {
                         <option value="asc">Title: A → Z</option>
                         <option value="desc">Title: Z → A</option>
                       </select>
-                    </th>
-
-                    {/* Category column */}
-                    <th className="px-4 py-3 min-w-[150px] align-top">
+                    </div>
+                  ),
+                },
+                {
+                  key: 'category',
+                  headerClassName: 'min-w-[150px] align-top',
+                  headerRender: () => (
+                    <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
                         Category
                       </div>
@@ -439,10 +428,14 @@ export default function AdminAnnouncementsPage() {
                           </option>
                         ))}
                       </select>
-                    </th>
-
-                    {/* Audience column */}
-                    <th className="px-4 py-3 min-w-[130px] align-top">
+                    </div>
+                  ),
+                },
+                {
+                  key: 'audience',
+                  headerClassName: 'min-w-[130px] align-top',
+                  headerRender: () => (
+                    <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
                         Audience
                       </div>
@@ -458,28 +451,16 @@ export default function AdminAnnouncementsPage() {
                           </option>
                         ))}
                       </select>
-                    </th>
-
-                    {/* Posted Date column */}
-                    <th className="px-4 py-3 min-w-[160px] align-top">
-                      <div className="flex items-center justify-between gap-1 mb-1.5">
-                        <button
-                          type="button"
-                          onClick={handleToggleDateSort}
-                          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors cursor-pointer"
-                          title="Click to toggle Latest-Oldest / Oldest-Latest"
-                        >
-                          <span>Posted Date</span>
-                          {primarySort === 'date' && dateSort === 'desc' && (
-                            <ArrowDown className="h-3.5 w-3.5 text-primary" />
-                          )}
-                          {primarySort === 'date' && dateSort === 'asc' && (
-                            <ArrowUp className="h-3.5 w-3.5 text-primary" />
-                          )}
-                          {primarySort !== 'date' && (
-                            <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 opacity-60" />
-                          )}
-                        </button>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'postedDate',
+                  headerClassName: 'min-w-[160px] align-top',
+                  headerRender: () => (
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+                        <span className={primarySort === 'date' ? 'text-accent font-bold' : ''}>Posted Date</span>
                       </div>
                       <select
                         value={dateSort}
@@ -494,10 +475,14 @@ export default function AdminAnnouncementsPage() {
                         <option value="desc">Latest → Oldest</option>
                         <option value="asc">Oldest → Latest</option>
                       </select>
-                    </th>
-
-                    {/* Status column */}
-                    <th className="px-4 py-3 min-w-[130px] align-top">
+                    </div>
+                  ),
+                },
+                {
+                  key: 'status',
+                  headerClassName: 'min-w-[130px] align-top',
+                  headerRender: () => (
+                    <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
                         Status
                       </div>
@@ -510,11 +495,16 @@ export default function AdminAnnouncementsPage() {
                         <option value="ACTIVE">Active</option>
                         <option value="ARCHIVED">Archived</option>
                       </select>
-                    </th>
-
-                    {/* Actions column */}
-                    <th className="px-4 py-3 text-right align-top min-w-[100px]">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+                    </div>
+                  ),
+                },
+                {
+                  key: 'actions',
+                  align: 'right',
+                  headerClassName: 'min-w-[100px] align-top',
+                  headerRender: () => (
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1.5 text-right">
                         Actions
                       </div>
                       {hasActiveFilters ? (
@@ -530,10 +520,11 @@ export default function AdminAnnouncementsPage() {
                       ) : (
                         <span className="text-xs text-slate-400 dark:text-slate-600 py-1 block">—</span>
                       )}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    </div>
+                  ),
+                },
+              ]}
+            >
                   {filteredAndSortedList.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-12 text-center">
@@ -623,9 +614,7 @@ export default function AdminAnnouncementsPage() {
                       </tr>
                     ))
                   )}
-                </tbody>
-              </table>
-            </div>
+            </DataTable>
           </div>
         )}
       </Card>

@@ -6,11 +6,18 @@ import com.schoolsystem.entity.Room;
 import com.schoolsystem.entity.enums.RoomType;
 import com.schoolsystem.repository.RoomRepository;
 import com.schoolsystem.repository.ScheduleRepository;
+import com.schoolsystem.entity.Schedule;
+import com.schoolsystem.repository.SectionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -18,10 +25,46 @@ public class RoomService {
 
     private final RoomRepository roomRepository;
     private final ScheduleRepository scheduleRepository;
+    private final SectionRepository sectionRepository;
 
     @Transactional(readOnly = true)
     public List<Room> getAllRooms() {
         return roomRepository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Room> findAvailableRooms(Schedule.Day day, LocalTime startTime, LocalTime endTime,
+                                         RoomType roomType, int minCapacity, String excludeSectionId) {
+        if (day == null) throw new IllegalArgumentException("Day is required");
+        if (startTime == null || endTime == null) throw new IllegalArgumentException("Time range is required");
+        if (!startTime.isBefore(endTime)) throw new IllegalArgumentException("Start time must be before end time");
+
+        Set<String> excludedScheduleIds = Collections.emptySet();
+        if (excludeSectionId != null && !excludeSectionId.isBlank()) {
+            excludedScheduleIds = sectionRepository.findById(excludeSectionId)
+                    .map(sec -> sec.getSchedules().stream().map(Schedule::getId).collect(Collectors.toSet()))
+                    .orElse(Collections.emptySet());
+        }
+
+        Set<String> finalExcludedScheduleIds = excludedScheduleIds;
+        List<Schedule> conflictingSchedules = scheduleRepository.findAll().stream()
+                .filter(s -> s.getDay() == day)
+                .filter(s -> !finalExcludedScheduleIds.contains(s.getId()))
+                .filter(s -> startTime.isBefore(s.getEndTime()) && s.getStartTime().isBefore(endTime))
+                .toList();
+
+        Set<String> busyRoomIds = conflictingSchedules.stream()
+                .map(s -> s.getRoom().getId())
+                .collect(Collectors.toSet());
+
+        List<Room> activeRooms = roomRepository.findByIsActiveTrue();
+        return activeRooms.stream()
+                .filter(r -> roomType == null || r.getRoomType() == roomType)
+                .filter(r -> r.getCapacity() >= minCapacity)
+                .filter(r -> !busyRoomIds.contains(r.getId()))
+                .sorted(Comparator.comparingInt((Room r) -> r.getCapacity() - minCapacity)
+                        .thenComparing(Room::getRoomName))
+                .toList();
     }
 
     @Transactional

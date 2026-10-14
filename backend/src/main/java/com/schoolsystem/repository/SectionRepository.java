@@ -11,4 +11,7 @@ public interface SectionRepository extends JpaRepository<Section, String> {
     List<Section> findByFaculty_Id(String facultyId);
     List<Section> findBySchedules_Id(String scheduleId);
     List<Section> findBySectionCodeStartingWith(String prefix);
+    boolean existsBySectionCodeAndSubject_SubjectCode(String sectionCode, String subjectCode);
+    Optional<Section> findBySectionCodeAndSubject_SubjectCode(String sectionCode, String subjectCode);
+    Optional<Section> findBySectionCodeAndSubject_SubjectCodeAndIdNot(String sectionCode, String subjectCode, String id);
 }

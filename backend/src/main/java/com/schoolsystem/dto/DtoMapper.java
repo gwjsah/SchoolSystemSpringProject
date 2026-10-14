@@ -19,6 +19,7 @@ import com.schoolsystem.dto.Responses.RosterEntryDto;
 import com.schoolsystem.dto.Responses.ScheduleDto;
 import com.schoolsystem.dto.Responses.SectionDto;
 import com.schoolsystem.dto.Responses.SubjectDto;
+import com.schoolsystem.dto.Responses.TermCalendarDto;
 import com.schoolsystem.entity.Account;
 import com.schoolsystem.entity.Admin;
 import com.schoolsystem.entity.AdmissionPeriod;
@@ -39,6 +40,7 @@ import com.schoolsystem.entity.Schedule;
 import com.schoolsystem.entity.Section;
 import com.schoolsystem.entity.Student;
 import com.schoolsystem.entity.Subject;
+import com.schoolsystem.entity.TermCalendar;
 import com.schoolsystem.service.GradeService;
 
 import java.util.List;
@@ -120,7 +122,7 @@ public final class DtoMapper {
 
     public static ScheduleDto schedule(Schedule s) {
         return new ScheduleDto(s.getId(), s.getDay(), s.getStartTime(), s.getEndTime(),
-                s.getRoom().getId(), s.getRoom().getRoomName());
+                s.getRoom().getId(), s.getRoom().getRoomName(), s.getSlotType());
     }
 
     public static SectionDto section(Section s) {
@@ -251,5 +253,18 @@ public final class DtoMapper {
                 fe.getStudentEngagement(),
                 fe.getAverageScore(),
                 fe.getComments());
+    }
+
+    public static TermCalendarDto termCalendar(TermCalendar t) {
+        if (t == null) return null;
+        return new TermCalendarDto(
+                t.getId(),
+                t.getSchoolYear(),
+                t.getSemester(),
+                t.getStartsAt(),
+                t.getEndsAt(),
+                t.isActive(),
+                t.getCreatedAt(),
+                t.getUpdatedAt());
     }
 }

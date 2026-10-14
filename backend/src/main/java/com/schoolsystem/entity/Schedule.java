@@ -25,6 +25,10 @@ public class Schedule {
     @Column(length = 36, nullable = false, updatable = false)
     private String id;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "slot_type")
+    private com.schoolsystem.entity.enums.RoomType slotType;
+
     @NotNull(message = "Day is required")
     @Enumerated(EnumType.STRING)
     @Column(name = "day_of_week", nullable = false)

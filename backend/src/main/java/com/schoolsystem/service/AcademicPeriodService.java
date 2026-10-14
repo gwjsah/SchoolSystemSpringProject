@@ -1,20 +1,25 @@
 package com.schoolsystem.service;
 
 import com.schoolsystem.dto.DtoMapper;
+import com.schoolsystem.dto.Requests.CreateTermCalendarRequest;
 import com.schoolsystem.dto.Requests.OpenAdmissionPeriodRequest;
 import com.schoolsystem.dto.Requests.OpenEnrollmentPeriodRequest;
 import com.schoolsystem.dto.Requests.OpenEvaluationPeriodRequest;
 import com.schoolsystem.dto.Requests.OpenGradingPeriodRequest;
+import com.schoolsystem.dto.Requests.UpdateTermCalendarRequest;
 import com.schoolsystem.dto.Responses.AcademicPeriodsStatusDto;
 import com.schoolsystem.entity.AdmissionPeriod;
 import com.schoolsystem.entity.EnrollmentPeriod;
 import com.schoolsystem.entity.EvaluationPeriod;
 import com.schoolsystem.entity.GradingPeriod;
+import com.schoolsystem.entity.TermCalendar;
 import com.schoolsystem.exception.NotFoundException;
 import com.schoolsystem.repository.AdmissionPeriodRepository;
+import com.schoolsystem.repository.AttendanceSessionRepository;
 import com.schoolsystem.repository.EnrollmentPeriodRepository;
 import com.schoolsystem.repository.EvaluationPeriodRepository;
 import com.schoolsystem.repository.GradingPeriodRepository;
+import com.schoolsystem.repository.TermCalendarRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +34,8 @@ public class AcademicPeriodService {
     private final GradingPeriodRepository gradingPeriodRepository;
     private final EvaluationPeriodRepository evaluationPeriodRepository;
     private final AdmissionPeriodRepository admissionPeriodRepository;
+    private final TermCalendarRepository termCalendarRepository;
+    private final AttendanceSessionRepository attendanceSessionRepository;
 
     @Transactional(readOnly = true)
     public AcademicPeriodsStatusDto getPeriodsStatus() {
@@ -44,12 +51,16 @@ public class AcademicPeriodService {
         AdmissionPeriod activeAdmission = admissionPeriodRepository
                 .findFirstByIsOpenTrueOrderByStartsAtDesc()
                 .orElse(null);
+        TermCalendar activeTerm = termCalendarRepository
+                .findFirstByIsActiveTrueOrderByStartsAtDesc()
+                .orElse(null);
 
         return new AcademicPeriodsStatusDto(
                 DtoMapper.enrollmentPeriod(activeEnrollment),
                 DtoMapper.gradingPeriod(activeGrading),
                 DtoMapper.evaluationPeriod(activeEvaluation),
-                DtoMapper.admissionPeriod(activeAdmission)
+                DtoMapper.admissionPeriod(activeAdmission),
+                DtoMapper.termCalendar(activeTerm)
         );
     }
 
@@ -239,5 +250,102 @@ public class AcademicPeriodService {
                 .orElseThrow(() -> new IllegalStateException("No active admission period is currently open"));
         active.setOpen(false);
         return admissionPeriodRepository.save(active);
+    }
+
+    // ── Term Calendar ───────────────────────────────────────────────────────
+
+    private void validateSchoolYear(String sy) {
+        if (sy == null || !sy.matches("^\\d{4}-\\d{4}$")) {
+            throw new IllegalArgumentException("School year must follow the format 'YYYY-YYYY' (e.g. 2026-2027)");
+        }
+        String[] parts = sy.split("-");
+        int y1 = Integer.parseInt(parts[0]);
+        int y2 = Integer.parseInt(parts[1]);
+        if (y2 != y1 + 1) {
+            throw new IllegalArgumentException("School year must have consecutive years (e.g. " + y1 + "-" + (y1 + 1) + ")");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<TermCalendar> getAllTerms() {
+        return termCalendarRepository.findAllByOrderByStartsAtDesc();
+    }
+
+    @Transactional(readOnly = true)
+    public TermCalendar getActiveTerm() {
+        return termCalendarRepository.findFirstByIsActiveTrueOrderByStartsAtDesc()
+                .orElseThrow(() -> new NotFoundException("No active term calendar is currently set"));
+    }
+
+    @Transactional
+    public TermCalendar createTerm(CreateTermCalendarRequest req) {
+        if (req.startsAt() == null || req.endsAt() == null) {
+            throw new IllegalArgumentException("Class start and end dates are required");
+        }
+        if (!req.endsAt().isAfter(req.startsAt())) {
+            throw new IllegalArgumentException("Class end date must be after start date");
+        }
+        String sy = req.schoolYear().trim();
+        validateSchoolYear(sy);
+
+        if (termCalendarRepository.existsBySchoolYearAndSemester(sy, req.semester())) {
+            throw new IllegalStateException("A term calendar already exists for " + sy + " " + req.semester());
+        }
+
+        TermCalendar term = new TermCalendar();
+        term.setSchoolYear(sy);
+        term.setSemester(req.semester());
+        term.setStartsAt(req.startsAt());
+        term.setEndsAt(req.endsAt());
+        term.setActive(false);
+
+        return termCalendarRepository.save(term);
+    }
+
+    @Transactional
+    public TermCalendar updateTerm(String id, UpdateTermCalendarRequest req) {
+        TermCalendar term = termCalendarRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Term calendar not found: " + id));
+
+        if (req.startsAt() == null || req.endsAt() == null) {
+            throw new IllegalArgumentException("Class start and end dates are required");
+        }
+        if (!req.endsAt().isAfter(req.startsAt())) {
+            throw new IllegalArgumentException("Class end date must be after start date");
+        }
+        String sy = req.schoolYear().trim();
+        validateSchoolYear(sy);
+
+        if (termCalendarRepository.existsBySchoolYearAndSemesterAndIdNot(sy, req.semester(), id)) {
+            throw new IllegalStateException("A term calendar already exists for " + sy + " " + req.semester());
+        }
+
+        if (attendanceSessionRepository.existsByTerm_IdAndDateLessThanOrTerm_IdAndDateGreaterThan(id, req.startsAt(), req.endsAt())) {
+            throw new IllegalStateException("Cannot update term dates: saved attendance sessions exist outside the new date range (" + req.startsAt() + " to " + req.endsAt() + ").");
+        }
+
+        term.setSchoolYear(sy);
+        term.setSemester(req.semester());
+        term.setStartsAt(req.startsAt());
+        term.setEndsAt(req.endsAt());
+
+        return termCalendarRepository.save(term);
+    }
+
+    @Transactional
+    public TermCalendar activateTerm(String id) {
+        TermCalendar target = termCalendarRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Term calendar not found: " + id));
+
+        List<TermCalendar> activeTerms = termCalendarRepository.findByIsActiveTrue();
+        for (TermCalendar t : activeTerms) {
+            if (!t.getId().equals(id)) {
+                t.setActive(false);
+            }
+        }
+        termCalendarRepository.saveAll(activeTerms);
+
+        target.setActive(true);
+        return termCalendarRepository.save(target);
     }
 }

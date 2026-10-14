@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
   EmptyState,
   ErrorState,
   Field,
@@ -15,7 +16,6 @@ import {
   LoadingState,
   PageHeader,
   StatCard,
-  Table,
 } from '../../components/ui'
 import { DOWNPAYMENT } from '../../config/billing'
 import { formatCurrency, formatDate, formatTerm, labelize } from '../../lib/format'
@@ -76,8 +76,8 @@ export default function PaymentsPage() {
           <div className="grid gap-6 lg:grid-cols-5">
             <div className="lg:col-span-3">
               {bal.paymentPlan === 'QUARTERLY' ? (
-                <Card title="Quarterly schedule" bodyClassName="">
-                  <Table
+                <Card title="Quarterly schedule" bodyClassName="p-0 overflow-hidden">
+                  <DataTable
                     columns={[
                       'Quarter',
                       { label: 'Amount', align: 'right' },
@@ -86,7 +86,7 @@ export default function PaymentsPage() {
                       'Status',
                     ]}
                   >
-                    <tr>
+                    <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3 font-medium">Downpayment</td>
                       <td className="px-4 py-3 text-right">{formatCurrency(DOWNPAYMENT)}</td>
                       <td className="px-4 py-3 text-right">{formatCurrency(bal.downpaymentPaid ? DOWNPAYMENT : 0)}</td>
@@ -96,7 +96,7 @@ export default function PaymentsPage() {
                       </td>
                     </tr>
                     {bal.quarters.map((q) => (
-                      <tr key={q.id}>
+                      <tr key={q.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="px-4 py-3 font-medium">{labelize(q.quarter)}</td>
                         <td className="px-4 py-3 text-right">{formatCurrency(q.scheduledAmount)}</td>
                         <td className="px-4 py-3 text-right">{formatCurrency(q.paidAmount)}</td>
@@ -106,7 +106,7 @@ export default function PaymentsPage() {
                         </td>
                       </tr>
                     ))}
-                  </Table>
+                  </DataTable>
                 </Card>
               ) : (
                 <Card title="Full payment plan">
@@ -131,7 +131,7 @@ export default function PaymentsPage() {
         </Card>
       )}
 
-      <Card title="Payment history" className="mt-6" bodyClassName="">
+      <Card title="Payment history" className="mt-6" bodyClassName="p-0 overflow-hidden">
         {history.error ? (
           <div className="p-5">
             <ErrorState message={history.error} onRetry={history.reload} />
@@ -139,9 +139,9 @@ export default function PaymentsPage() {
         ) : (history.data ?? []).length === 0 ? (
           <EmptyState icon={Receipt} title="No payments yet" />
         ) : (
-          <Table columns={['Date', 'Term', 'Type', 'Method', { label: 'Amount', align: 'right' }]}>
+          <DataTable columns={['Date', 'Term', 'Type', 'Method', { label: 'Amount', align: 'right' }]}>
             {history.data.map((p) => (
-              <tr key={p.id}>
+              <tr key={p.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="whitespace-nowrap px-4 py-3">{formatDate(p.paidAt, true)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-400">{formatTerm(p.semester, p.schoolYear)}</td>
                 <td className="px-4 py-3">
@@ -152,7 +152,7 @@ export default function PaymentsPage() {
                 <td className="px-4 py-3 text-right font-medium text-slate-900 dark:text-white">{formatCurrency(p.amount)}</td>
               </tr>
             ))}
-          </Table>
+          </DataTable>
         )}
       </Card>
     </div>

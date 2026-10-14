@@ -25,6 +25,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
   EmptyState,
   ErrorState,
   Field,
@@ -432,48 +433,24 @@ export default function AdminSubjectsPage() {
             Try adjusting your search query, course filter, or year level.
           </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none group hover:text-slate-900 dark:hover:text-white transition-colors"
-                    onClick={() => toggleSort('subjectCode')}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className={sortField === 'subjectCode' ? 'text-accent font-bold' : ''}>Subject Code</span>
-                      {renderSortIcon('subjectCode')}
-                    </div>
-                  </th>
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none group hover:text-slate-900 dark:hover:text-white transition-colors"
-                    onClick={() => toggleSort('subjectName')}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className={sortField === 'subjectName' ? 'text-accent font-bold' : ''}>Subject Name</span>
-                      {renderSortIcon('subjectName')}
-                    </div>
-                  </th>
-                  <th
-                    className="px-4 py-3 cursor-pointer select-none group hover:text-slate-900 dark:hover:text-white transition-colors"
-                    onClick={() => toggleSort('yearLevel')}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className={sortField === 'yearLevel' ? 'text-accent font-bold' : ''}>Year & Term</span>
-                      {renderSortIcon('yearLevel')}
-                    </div>
-                  </th>
-                  <th className="px-4 py-3">Units</th>
-                  <th className="px-4 py-3">Assigned Faculty</th>
-                  <th className="px-4 py-3">Prerequisites</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {filteredSubjects.map((s) => {
-                  const assigned = s.assignedFaculty || []
-                  return (
-                    <tr key={s.id || s.subjectCode} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+          <DataTable
+            columns={[
+              { key: 'subjectCode', label: 'Subject Code', sortable: true, sortType: 'text' },
+              { key: 'subjectName', label: 'Subject Name', sortable: true, sortType: 'text' },
+              { key: 'yearLevel', label: 'Year & Term', sortable: true, sortType: 'number' },
+              { key: 'units', label: 'Units' },
+              { key: 'assignedFaculty', label: 'Assigned Faculty' },
+              { key: 'prerequisites', label: 'Prerequisites' },
+              { key: 'actions', label: 'Actions', align: 'right' },
+            ]}
+            sortKey={sortField}
+            sortDir={sortDirection}
+            onSort={(key) => toggleSort(key)}
+          >
+            {filteredSubjects.map((s) => {
+              const assigned = s.assignedFaculty || []
+              return (
+                <tr key={s.id || s.subjectCode} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3">
                         <span className="font-mono font-bold text-slate-900 dark:text-white">
                           {s.subjectCode}
@@ -552,9 +529,7 @@ export default function AdminSubjectsPage() {
                     </tr>
                   )
                 })}
-              </tbody>
-            </table>
-          </div>
+          </DataTable>
         )}
       </Card>
 

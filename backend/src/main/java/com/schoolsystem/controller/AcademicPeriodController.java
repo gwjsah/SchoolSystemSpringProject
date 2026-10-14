@@ -1,15 +1,18 @@
 package com.schoolsystem.controller;
 
 import com.schoolsystem.dto.DtoMapper;
+import com.schoolsystem.dto.Requests.CreateTermCalendarRequest;
 import com.schoolsystem.dto.Requests.OpenAdmissionPeriodRequest;
 import com.schoolsystem.dto.Requests.OpenEnrollmentPeriodRequest;
 import com.schoolsystem.dto.Requests.OpenEvaluationPeriodRequest;
 import com.schoolsystem.dto.Requests.OpenGradingPeriodRequest;
+import com.schoolsystem.dto.Requests.UpdateTermCalendarRequest;
 import com.schoolsystem.dto.Responses.AcademicPeriodsStatusDto;
 import com.schoolsystem.dto.Responses.AdmissionPeriodDto;
 import com.schoolsystem.dto.Responses.EnrollmentPeriodDto;
 import com.schoolsystem.dto.Responses.EvaluationPeriodDto;
 import com.schoolsystem.dto.Responses.GradingPeriodDto;
+import com.schoolsystem.dto.Responses.TermCalendarDto;
 import com.schoolsystem.service.AcademicPeriodService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +29,7 @@ public class AcademicPeriodController {
 
     private final AcademicPeriodService academicPeriodService;
 
-    @GetMapping("/status")
+    @GetMapping({"/status", "/summary"})
     public AcademicPeriodsStatusDto getStatus() {
         return academicPeriodService.getPeriodsStatus();
     }
@@ -141,6 +144,40 @@ public class AcademicPeriodController {
     @PreAuthorize("hasRole('ADMIN')")
     public AdmissionPeriodDto closeAdmissionPeriod(@PathVariable String id) {
         return DtoMapper.admissionPeriod(academicPeriodService.closeAdmissionPeriod(id));
+    }
+
+    // ── Term Calendar ───────────────────────────────────────────────────────
+
+    @GetMapping("/term")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<TermCalendarDto> getAllTerms() {
+        return academicPeriodService.getAllTerms().stream()
+                .map(DtoMapper::termCalendar)
+                .toList();
+    }
+
+    @GetMapping("/term/active")
+    public TermCalendarDto getActiveTerm() {
+        return DtoMapper.termCalendar(academicPeriodService.getActiveTerm());
+    }
+
+    @PostMapping("/term")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public TermCalendarDto createTerm(@Valid @RequestBody CreateTermCalendarRequest req) {
+        return DtoMapper.termCalendar(academicPeriodService.createTerm(req));
+    }
+
+    @PutMapping("/term/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public TermCalendarDto updateTerm(@PathVariable String id, @Valid @RequestBody UpdateTermCalendarRequest req) {
+        return DtoMapper.termCalendar(academicPeriodService.updateTerm(id, req));
+    }
+
+    @PatchMapping("/term/{id}/activate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public TermCalendarDto activateTerm(@PathVariable String id) {
+        return DtoMapper.termCalendar(academicPeriodService.activateTerm(id));
     }
 }
 

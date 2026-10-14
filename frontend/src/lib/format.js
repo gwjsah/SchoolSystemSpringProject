@@ -21,6 +21,21 @@ export function formatDate(value, withTime = false) {
   })
 }
 
+/** "2026-08-11" -> "Aug 11, 2026" without timezone shifting. */
+export function formatLocalDate(value) {
+  if (!value) return '—'
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-').map(Number)
+    const date = new Date(y, m - 1, d)
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+  return formatDate(value, false)
+}
+
 /** "13:30:00" -> "1:30 PM" */
 export function formatTime(value) {
   if (!value) return ''

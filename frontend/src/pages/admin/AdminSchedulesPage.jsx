@@ -27,13 +27,14 @@ import {
   ConfirmDialog,
   EmptyState,
   ErrorState,
+  DataTable,
   Field,
   inputClass,
   LoadingState,
   PageHeader,
-  Table,
 } from '../../components/ui'
 import { formatTime, labelize } from '../../lib/format'
+import BlockBuilderModal from './BlockBuilderModal'
 
 const DAYS = [
   { key: 'MONDAY', label: 'Monday', short: 'Mon' },
@@ -76,6 +77,10 @@ export default function AdminSchedulesPage() {
   const sections = useApi('/sections')
   const subjects = useApi('/subjects')
   const faculty = useApi('/faculty')
+  const courses = useApi('/courses')
+
+  // Block Builder modal toggle
+  const [blockBuilderOpen, setBlockBuilderOpen] = useState(false)
 
   // View toggle: 'TIMETABLE' (Room Weekly Grid) or 'DIRECTORY' (All Class Sections Table)
   const [viewMode, setViewMode] = useState('TIMETABLE')
@@ -96,11 +101,12 @@ export default function AdminSchedulesPage() {
   const [sectionModalOpen, setSectionModalOpen] = useState(false)
   const [editingSectionId, setEditingSectionId] = useState(null)
   const [sectionForm, setSectionForm] = useState({
+    sectionCode: '',
     subjectCode: '',
     facultyId: '',
     capacity: 35,
     schedules: [
-      { day: 'MONDAY', startTime: '08:00', endTime: '10:00', roomId: '' },
+      { day: 'MONDAY', startTime: '08:00', endTime: '10:00', roomId: '', slotType: 'LECTURE' },
     ],
   })
   const [modalError, setModalError] = useState('')
@@ -203,6 +209,7 @@ export default function AdminSchedulesPage() {
 
     setEditingSectionId(null)
     setSectionForm({
+      sectionCode: '',
       subjectCode: defaultSubject?.subjectCode || '',
       facultyId: defaultFacultyId,
       capacity: defaultCapacity,
@@ -211,7 +218,8 @@ export default function AdminSchedulesPage() {
           day,
           startTime,
           endTime,
-          roomId: roomId || activeRooms[0]?.id || '',
+          roomId: roomId || '',
+          slotType: 'LECTURE',
         },
       ],
     })
@@ -223,6 +231,7 @@ export default function AdminSchedulesPage() {
   const openEditModal = (sec) => {
     setEditingSectionId(sec.id)
     setSectionForm({
+      sectionCode: sec.sectionCode || '',
       subjectCode: sec.subjectCode,
       facultyId: sec.facultyId,
       capacity: sec.capacity,
@@ -230,7 +239,8 @@ export default function AdminSchedulesPage() {
         day: s.day,
         startTime: s.startTime.substring(0, 5),
         endTime: s.endTime.substring(0, 5),
-        roomId: s.roomId,
+        roomId: s.roomId || '',
+        slotType: s.slotType || 'LECTURE',
       })),
     })
     setModalError('')
@@ -441,7 +451,8 @@ export default function AdminSchedulesPage() {
           day: 'WEDNESDAY',
           startTime: '08:00',
           endTime: '10:00',
-          roomId: selectedRoomId || activeRooms[0]?.id || '',
+          roomId: '',
+          slotType: 'LAB',
         },
       ],
     }))
@@ -498,15 +509,12 @@ export default function AdminSchedulesPage() {
         setModalError(`Slot #${i + 1}: End time must be after start time.`)
         return
       }
-      if (!slot.roomId) {
-        setModalError(`Slot #${i + 1}: Please assign a room.`)
-        return
-      }
     }
 
     setSubmitting(true)
     try {
       const payload = {
+        sectionCode: sectionForm.sectionCode?.trim() || null,
         subjectCode: sectionForm.subjectCode,
         facultyId: sectionForm.facultyId,
         capacity: Number(sectionForm.capacity),
@@ -514,7 +522,8 @@ export default function AdminSchedulesPage() {
           day: s.day,
           startTime: `${s.startTime}:00`,
           endTime: `${s.endTime}:00`,
-          roomId: s.roomId,
+          roomId: s.roomId && s.roomId !== 'AUTO' ? s.roomId : null,
+          slotType: s.slotType || 'LECTURE',
         })),
       }
 
@@ -680,6 +689,15 @@ export default function AdminSchedulesPage() {
                 All Sections ({sectionList.length})
               </button>
             </div>
+
+            <Button
+              variant="secondary"
+              onClick={() => setBlockBuilderOpen(true)}
+              className="gap-1.5"
+            >
+              <Layers className="h-4 w-4 text-accent" />
+              Course Block Builder
+            </Button>
 
             <Button
               onClick={() => openCreateModal('MONDAY', '08:00', '10:00', selectedRoomId)}
@@ -1056,7 +1074,7 @@ export default function AdminSchedulesPage() {
               {searchQuery ? 'Try adjusting your search query.' : 'Click "Schedule Section" to create your first class section.'}
             </EmptyState>
           ) : (
-            <Table
+            <DataTable
               columns={[
                 'Section Code',
                 'Subject',
@@ -1069,7 +1087,7 @@ export default function AdminSchedulesPage() {
               {filteredSections.map((sec) => {
                 const percent = Math.min(100, Math.round((sec.currentCount / sec.capacity) * 100))
                 return (
-                  <tr key={sec.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors">
+                  <tr key={sec.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">
                       {sec.sectionCode}
                     </td>
@@ -1148,7 +1166,7 @@ export default function AdminSchedulesPage() {
                   </tr>
                 )
               })}
-            </Table>
+            </DataTable>
           )}
         </Card>
       )}
@@ -1288,6 +1306,26 @@ export default function AdminSchedulesPage() {
 
             <form onSubmit={handleSaveSection} className="mt-4 space-y-4">
               {modalError && <Alert type="error">{modalError}</Alert>}
+
+              {/* Section Code (Admin-Typed) */}
+              <Field
+                label="Section Code"
+                htmlFor="sectionCode"
+                hint={
+                  editingSectionId
+                    ? "Section identifier code (unique per subject)"
+                    : "Enter custom section code (e.g. BSCS-1A) or leave blank to auto-generate"
+                }
+              >
+                <input
+                  id="sectionCode"
+                  type="text"
+                  value={sectionForm.sectionCode}
+                  onChange={(e) => setSectionForm({ ...sectionForm, sectionCode: e.target.value.toUpperCase() })}
+                  placeholder={editingSectionId ? "e.g. BSCS-1A" : "Auto-generated if left blank (e.g. BSCS-1)"}
+                  className={inputClass}
+                />
+              </Field>
 
               {/* Subject (only selectable on create) */}
               {!editingSectionId ? (
@@ -1464,7 +1502,22 @@ export default function AdminSchedulesPage() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                        {/* Slot Type */}
+                        <div>
+                          <label className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1 block">
+                            Type
+                          </label>
+                          <select
+                            value={slot.slotType || 'LECTURE'}
+                            onChange={(e) => updateScheduleSlotRow(index, 'slotType', e.target.value)}
+                            className={inputClass}
+                          >
+                            <option value="LECTURE">Lecture</option>
+                            <option value="LAB">Lab</option>
+                          </select>
+                        </div>
+
                         {/* Day */}
                         <div>
                           <label className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1 block">
@@ -1522,17 +1575,17 @@ export default function AdminSchedulesPage() {
                         {/* Room */}
                         <div>
                           <label className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1 block">
-                            Classroom / Lab
+                            Room
                           </label>
                           <select
-                            value={slot.roomId}
+                            value={slot.roomId || ''}
                             onChange={(e) => updateScheduleSlotRow(index, 'roomId', e.target.value)}
                             className={inputClass}
-                            required
                           >
+                            <option value="">✨ Auto (Best fit)</option>
                             {activeRooms.map((r) => (
                               <option key={r.id} value={r.id}>
-                                {r.roomName} ({r.roomType} · {r.capacity} seats)
+                                {r.roomName} ({r.roomType} · {r.capacity})
                               </option>
                             ))}
                           </select>
@@ -1711,6 +1764,24 @@ export default function AdminSchedulesPage() {
           </p>
         )}
       </ConfirmDialog>
+
+      {/* Course Block Builder Modal */}
+      <BlockBuilderModal
+        isOpen={blockBuilderOpen}
+        onClose={() => setBlockBuilderOpen(false)}
+        onSuccess={(msg) => {
+          setActionMessage({
+            type: 'success',
+            text: msg,
+          })
+          sections.reload()
+          schedules.reload()
+        }}
+        courses={courses.data ?? []}
+        subjects={subjectList}
+        facultyList={facultyList}
+        rooms={activeRooms}
+      />
     </div>
   )
 }

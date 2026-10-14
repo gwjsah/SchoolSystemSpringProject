@@ -8,13 +8,13 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
   EmptyState,
   ErrorState,
   Field,
   inputClass,
   LoadingState,
   PageHeader,
-  Table,
 } from '../../components/ui'
 import { formatSchedules, formatTime, labelize } from '../../lib/format'
 
@@ -30,11 +30,12 @@ export default function AdminSectionsPage() {
   const [editingItem, setEditingItem] = useState(null)
 
   const [formData, setFormData] = useState({
+    sectionCode: '',
     subjectCode: '',
     facultyId: '',
     capacity: 30,
     schedules: [
-      { day: 'MONDAY', startTime: '08:00', endTime: '10:00', roomId: '' },
+      { day: 'MONDAY', startTime: '08:00', endTime: '10:00', roomId: '', slotType: 'LECTURE' },
     ],
   })
 
@@ -62,11 +63,12 @@ export default function AdminSectionsPage() {
   const openCreate = () => {
     setEditingItem(null)
     setFormData({
+      sectionCode: '',
       subjectCode: subjectList[0]?.subjectCode || '',
       facultyId: facultyList[0]?.id || '',
       capacity: 30,
       schedules: [
-        { day: 'MONDAY', startTime: '08:00', endTime: '10:00', roomId: roomList[0]?.id || '' },
+        { day: 'MONDAY', startTime: '08:00', endTime: '10:00', roomId: '', slotType: 'LECTURE' },
       ],
     })
     setFormError('')
@@ -76,6 +78,7 @@ export default function AdminSectionsPage() {
   const openEdit = (sec) => {
     setEditingItem(sec)
     setFormData({
+      sectionCode: sec.sectionCode || '',
       subjectCode: sec.subjectCode,
       facultyId: sec.facultyId,
       capacity: sec.capacity,
@@ -83,7 +86,8 @@ export default function AdminSectionsPage() {
         day: s.day,
         startTime: s.startTime.substring(0, 5),
         endTime: s.endTime.substring(0, 5),
-        roomId: s.roomId,
+        roomId: s.roomId || '',
+        slotType: s.slotType || 'LECTURE',
       })),
     })
     setFormError('')
@@ -95,7 +99,7 @@ export default function AdminSectionsPage() {
       ...prev,
       schedules: [
         ...prev.schedules,
-        { day: 'WEDNESDAY', startTime: '08:00', endTime: '10:00', roomId: roomList[0]?.id || '' },
+        { day: 'WEDNESDAY', startTime: '08:00', endTime: '10:00', roomId: '', slotType: 'LAB' },
       ],
     }))
   }
@@ -126,6 +130,7 @@ export default function AdminSectionsPage() {
     setSubmitting(true)
 
     const payload = {
+      sectionCode: formData.sectionCode?.trim() || null,
       subjectCode: formData.subjectCode,
       facultyId: formData.facultyId,
       capacity: formData.capacity,
@@ -133,7 +138,8 @@ export default function AdminSectionsPage() {
         day: s.day,
         startTime: `${s.startTime}:00`,
         endTime: `${s.endTime}:00`,
-        roomId: s.roomId,
+        roomId: s.roomId && s.roomId !== 'AUTO' ? s.roomId : null,
+        slotType: s.slotType || 'LECTURE',
       })),
     }
 
@@ -199,6 +205,21 @@ export default function AdminSectionsPage() {
             <form onSubmit={handleSave} className="mt-4 space-y-4">
               {formError && <Alert type="error">{formError}</Alert>}
 
+              <Field
+                label="Section Code"
+                htmlFor="sectionCode"
+                hint={editingItem ? "Section identifier (unique per subject)" : "Custom section code (e.g. BSCS-1A) or leave blank to auto-generate"}
+              >
+                <input
+                  id="sectionCode"
+                  type="text"
+                  value={formData.sectionCode}
+                  onChange={(e) => setFormData({ ...formData, sectionCode: e.target.value.toUpperCase() })}
+                  placeholder={editingItem ? "e.g. BSCS-1A" : "Auto-generated if left blank"}
+                  className={inputClass}
+                />
+              </Field>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="Subject" htmlFor="subjectCode">
                   <select
@@ -257,6 +278,15 @@ export default function AdminSectionsPage() {
                 {formData.schedules.map((row, idx) => (
                   <div key={idx} className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 first:border-t-0">
                     <select
+                      value={row.slotType || 'LECTURE'}
+                      onChange={(e) => updateScheduleRow(idx, 'slotType', e.target.value)}
+                      className="rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 py-1.5 px-2 text-xs"
+                    >
+                      <option value="LECTURE">Lecture</option>
+                      <option value="LAB">Lab</option>
+                    </select>
+
+                    <select
                       value={row.day}
                       onChange={(e) => updateScheduleRow(idx, 'day', e.target.value)}
                       className="rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 py-1.5 px-2 text-xs"
@@ -273,7 +303,8 @@ export default function AdminSectionsPage() {
                       value={row.startTime}
                       onChange={(e) => updateScheduleRow(idx, 'startTime', e.target.value)}
                       className="rounded border border-slate-300 py-1 px-1.5 text-xs"
-                    />
+                    >
+                    </input>
                     <span className="text-xs text-slate-400">to</span>
                     <input
                       type="time"
@@ -283,13 +314,14 @@ export default function AdminSectionsPage() {
                     />
 
                     <select
-                      value={row.roomId}
+                      value={row.roomId || ''}
                       onChange={(e) => updateScheduleRow(idx, 'roomId', e.target.value)}
                       className="flex-1 rounded border border-slate-300 py-1.5 px-2 text-xs min-w-[130px]"
                     >
+                      <option value="">✨ Auto (Best fit)</option>
                       {roomList.map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.roomName} ({labelize(r.roomType)})
+                          {r.roomName} ({labelize(r.roomType)} · {r.capacity})
                         </option>
                       ))}
                     </select>
@@ -339,13 +371,13 @@ export default function AdminSectionsPage() {
       </ConfirmDialog>
 
       {/* Sections Table */}
-      <Card bodyClassName="p-0">
+      <Card bodyClassName="p-0 overflow-hidden">
         {sectionList.length === 0 ? (
           <EmptyState icon={Users} title="No class sections created yet" />
         ) : (
-          <Table columns={['Section & Subject', 'Instructor', 'Weekly Schedules', 'Enrollment', 'Status', { label: 'Actions', align: 'right' }]}>
+          <DataTable columns={['Section & Subject', 'Instructor', 'Weekly Schedules', 'Enrollment', 'Status', { label: 'Actions', align: 'right' }]}>
             {sectionList.map((sec) => (
-              <tr key={sec.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+              <tr key={sec.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-900 dark:text-white">{sec.sectionCode}</span>
@@ -396,7 +428,7 @@ export default function AdminSectionsPage() {
                 </td>
               </tr>
             ))}
-          </Table>
+          </DataTable>
         )}
       </Card>
     </div>

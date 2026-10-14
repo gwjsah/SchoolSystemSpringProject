@@ -8,6 +8,8 @@ import {
   Save,
   ArrowUpDown,
   Layers,
+  CalendarCheck,
+  GraduationCap,
 } from 'lucide-react'
 import api, { getErrorMessage } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
@@ -16,11 +18,13 @@ import {
   Badge,
   Button,
   Card,
+  DataTable,
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
 } from '../../components/ui'
+import AttendanceView from '../../components/AttendanceView'
 import { formatGrade, formatSchedules } from '../../lib/format'
 
 export default function FacultySectionsPage() {
@@ -32,6 +36,7 @@ export default function FacultySectionsPage() {
   const [selectedCourseCode, setSelectedCourseCode] = useState('ALL') // 'ALL' or subjectCode
   const [courseSortOrder, setCourseSortOrder] = useState('asc') // 'asc' | 'desc'
   const [sectionSortOrder, setSectionSortOrder] = useState('asc') // 'asc' | 'desc'
+  const [activeSectionTab, setActiveSectionTab] = useState('students') // 'students' | 'attendance' | 'grades'
 
   const [roster, setRoster] = useState({ loading: false, data: null, error: null })
   const [gradeInputs, setGradeInputs] = useState({}) // studentId -> { prelim, midterm, preFinal, final }
@@ -397,168 +402,278 @@ export default function FacultySectionsPage() {
                     </div>
                   </div>
 
-                  {!canEdit && (
-                    <Alert type="warning" className="mt-4">
-                      Grading submissions are closed for this period. Existing grades are read-only.
-                    </Alert>
+                  {/* Section Tabs: [Students] [Attendance] [Grades] */}
+                  <div className="flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pt-3 pb-2 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setActiveSectionTab('students')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                        activeSectionTab === 'students'
+                          ? 'bg-accent text-white shadow-xs font-bold'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span>Students ({roster.data?.length ?? currentSection.currentCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSectionTab('attendance')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                        activeSectionTab === 'attendance'
+                          ? 'bg-accent text-white shadow-xs font-bold'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <CalendarCheck className="h-3.5 w-3.5" />
+                      <span>Attendance</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSectionTab('grades')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                        activeSectionTab === 'grades'
+                          ? 'bg-accent text-white shadow-xs font-bold'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <GraduationCap className="h-3.5 w-3.5" />
+                      <span>Grades</span>
+                    </button>
+                  </div>
+
+                  {/* 1. STUDENTS TAB */}
+                  {activeSectionTab === 'students' && (
+                    <div className="mt-4">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
+                        Enrolled Students Roster ({roster.data?.length ?? currentSection.currentCount})
+                      </h3>
+
+                      {roster.loading ? (
+                        <LoadingState label="Loading class roster..." />
+                      ) : roster.error ? (
+                        <ErrorState message={roster.error} />
+                      ) : (roster.data ?? []).length === 0 ? (
+                        <EmptyState icon={Users} title="No students currently enrolled">
+                          No students have confirmed enrollments in this section yet.
+                        </EmptyState>
+                      ) : (
+                        <DataTable
+                          columns={[
+                            {
+                              key: 'index',
+                              label: '#',
+                              align: 'center',
+                              headerClassName: 'w-12',
+                              render: (_, idx) => <span className="text-xs text-slate-400 font-mono">{idx + 1}</span>,
+                            },
+                            {
+                              key: 'studentName',
+                              label: 'Student Name',
+                              sortable: true,
+                              render: (row) => (
+                                <div>
+                                  <p className="font-semibold text-slate-900 dark:text-white">
+                                    {row.studentName}
+                                  </p>
+                                </div>
+                              ),
+                            },
+                            {
+                              key: 'studentNumber',
+                              label: 'Student Number',
+                              render: (row) => (
+                                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                  {row.studentNumber}
+                                </span>
+                              ),
+                            },
+                            {
+                              key: 'status',
+                              label: 'Enrollment Status',
+                              align: 'center',
+                              headerClassName: 'w-36',
+                              render: () => <Badge tone="green">ENROLLED</Badge>,
+                            },
+                          ]}
+                          data={roster.data}
+                          rowKey="studentId"
+                          emptyMessage="No students currently enrolled."
+                        />
+                      )}
+                    </div>
                   )}
 
-                  {/* Student Roster Table */}
-                  <div className="mt-4">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-                      Enrolled Students Roster ({roster.data?.length ?? currentSection.currentCount})
-                    </h3>
+                  {/* 2. ATTENDANCE TAB */}
+                  {activeSectionTab === 'attendance' && (
+                    <div className="mt-4">
+                      <AttendanceView
+                        sectionId={currentSection.id}
+                        sectionCode={currentSection.sectionCode}
+                        subjectName={currentSection.subjectName}
+                      />
+                    </div>
+                  )}
 
-                    {roster.loading ? (
-                      <LoadingState label="Loading class roster..." />
-                    ) : roster.error ? (
-                      <ErrorState message={roster.error} />
-                    ) : (roster.data ?? []).length === 0 ? (
-                      <EmptyState icon={Users} title="No students currently enrolled">
-                        No students have confirmed enrollments in this section yet.
-                      </EmptyState>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-left uppercase text-slate-500 dark:text-slate-400">
-                              <th className="py-2.5 px-3">Student</th>
-                              <th className="py-2.5 px-2 text-center w-16">Prelim</th>
-                              <th className="py-2.5 px-2 text-center w-16">Midterm</th>
-                              <th className="py-2.5 px-2 text-center w-16">Pre-Final</th>
-                              <th className="py-2.5 px-2 text-center w-16">Final</th>
-                              <th className="py-2.5 px-2 text-right">Computed Mid</th>
-                              <th className="py-2.5 px-2 text-right">Computed Fin</th>
-                              <th className="py-2.5 px-2 text-right">Overall</th>
-                              <th className="py-2.5 px-2 text-center">Remarks</th>
-                              <th className="py-2.5 px-2 text-center w-16">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {roster.data.map((entry) => {
-                              const inp = gradeInputs[entry.studentId] || {}
-                              const gr = entry.grade
-                              const isSaving = savingStudentId === entry.studentId
-                              const remarks = gr?.overallGrade != null ? gr.remarks : null
+                  {/* 3. GRADES TAB */}
+                  {activeSectionTab === 'grades' && (
+                    <div className="mt-4">
+                      {!canEdit && (
+                        <Alert type="warning" className="mb-4">
+                          Grading submissions are closed for this period. Existing grades are read-only.
+                        </Alert>
+                      )}
 
-                              return (
-                                <tr
-                                  key={entry.studentId}
-                                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
-                                >
-                                  <td className="py-2.5 px-3">
-                                    <p className="font-semibold text-slate-900 dark:text-white">
-                                      {entry.studentName}
-                                    </p>
-                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                                      {entry.studentNumber}
-                                    </p>
-                                  </td>
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
+                        Grade Submission & Evaluation ({roster.data?.length ?? currentSection.currentCount})
+                      </h3>
 
-                                  {/* Period grade inputs */}
-                                  <td className="py-2.5 px-1.5 text-center">
-                                    <input
-                                      type="number"
-                                      step="0.25"
-                                      min="1.0"
-                                      max="5.0"
-                                      placeholder="—"
-                                      disabled={!canEdit || isSaving}
-                                      value={inp.prelimGrade ?? ''}
-                                      onChange={(e) =>
-                                        handleGradeChange(entry.studentId, 'prelimGrade', e.target.value)
-                                      }
-                                      className="w-14 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-1 text-center font-mono text-xs focus:border-accent focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-900/50"
-                                    />
-                                  </td>
-                                  <td className="py-2.5 px-1.5 text-center">
-                                    <input
-                                      type="number"
-                                      step="0.25"
-                                      min="1.0"
-                                      max="5.0"
-                                      placeholder="—"
-                                      disabled={!canEdit || isSaving}
-                                      value={inp.midtermGrade ?? ''}
-                                      onChange={(e) =>
-                                        handleGradeChange(entry.studentId, 'midtermGrade', e.target.value)
-                                      }
-                                      className="w-14 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-1 text-center font-mono text-xs focus:border-accent focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-900/50"
-                                    />
-                                  </td>
-                                  <td className="py-2.5 px-1.5 text-center">
-                                    <input
-                                      type="number"
-                                      step="0.25"
-                                      min="1.0"
-                                      max="5.0"
-                                      placeholder="—"
-                                      disabled={!canEdit || isSaving}
-                                      value={inp.preFinalGrade ?? ''}
-                                      onChange={(e) =>
-                                        handleGradeChange(entry.studentId, 'preFinalGrade', e.target.value)
-                                      }
-                                      className="w-14 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-1 text-center font-mono text-xs focus:border-accent focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-900/50"
-                                    />
-                                  </td>
-                                  <td className="py-2.5 px-1.5 text-center">
-                                    <input
-                                      type="number"
-                                      step="0.25"
-                                      min="1.0"
-                                      max="5.0"
-                                      placeholder="—"
-                                      disabled={!canEdit || isSaving}
-                                      value={inp.finalGrade ?? ''}
-                                      onChange={(e) =>
-                                        handleGradeChange(entry.studentId, 'finalGrade', e.target.value)
-                                      }
-                                      className="w-14 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-1 text-center font-mono text-xs focus:border-accent focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-900/50"
-                                    />
-                                  </td>
+                      {roster.loading ? (
+                        <LoadingState label="Loading class roster..." />
+                      ) : roster.error ? (
+                        <ErrorState message={roster.error} />
+                      ) : (roster.data ?? []).length === 0 ? (
+                        <EmptyState icon={Users} title="No students currently enrolled">
+                          No students have confirmed enrollments in this section yet.
+                        </EmptyState>
+                      ) : (
+                        <DataTable
+                          columns={[
+                            { key: 'student', label: 'Student' },
+                            { key: 'prelim', label: 'Prelim', align: 'center', headerClassName: 'w-16' },
+                            { key: 'midterm', label: 'Midterm', align: 'center', headerClassName: 'w-16' },
+                            { key: 'preFinal', label: 'Pre-Final', align: 'center', headerClassName: 'w-16' },
+                            { key: 'final', label: 'Final', align: 'center', headerClassName: 'w-16' },
+                            { key: 'computedMid', label: 'Computed Mid', align: 'right' },
+                            { key: 'computedFin', label: 'Computed Fin', align: 'right' },
+                            { key: 'overall', label: 'Overall', align: 'right' },
+                            { key: 'remarks', label: 'Remarks', align: 'center' },
+                            { key: 'action', label: 'Action', align: 'center', headerClassName: 'w-16' },
+                          ]}
+                        >
+                          {roster.data.map((entry) => {
+                            const inp = gradeInputs[entry.studentId] || {}
+                            const gr = entry.grade
+                            const isSaving = savingStudentId === entry.studentId
+                            const remarks = gr?.overallGrade != null ? gr.remarks : null
 
-                                  {/* Computed columns */}
-                                  <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300">
-                                    {formatGrade(gr?.computedMidterm)}
-                                  </td>
-                                  <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300">
-                                    {formatGrade(gr?.computedFinal)}
-                                  </td>
-                                  <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900 dark:text-white">
-                                    {formatGrade(gr?.overallGrade)}
-                                  </td>
+                            return (
+                              <tr
+                                key={entry.studentId}
+                                className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                              >
+                                <td className="py-2.5 px-3">
+                                  <p className="font-semibold text-slate-900 dark:text-white">
+                                    {entry.studentName}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                                    {entry.studentNumber}
+                                  </p>
+                                </td>
 
-                                  {/* Remarks */}
-                                  <td className="py-2.5 px-2 text-center">
-                                    {remarks ? (
-                                      <Badge value={remarks}>{remarks}</Badge>
-                                    ) : (
-                                      <span className="text-[11px] text-slate-400">Pending</span>
-                                    )}
-                                  </td>
+                                {/* Period grade inputs */}
+                                <td className="py-2.5 px-1.5 text-center">
+                                  <input
+                                    type="number"
+                                    step="0.25"
+                                    min="1.0"
+                                    max="5.0"
+                                    placeholder="—"
+                                    disabled={!canEdit || isSaving}
+                                    value={inp.prelimGrade ?? ''}
+                                    onChange={(e) =>
+                                      handleGradeChange(entry.studentId, 'prelimGrade', e.target.value)
+                                    }
+                                    className="w-14 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-1 text-center font-mono text-xs focus:border-accent focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-900/50"
+                                  />
+                                </td>
+                                <td className="py-2.5 px-1.5 text-center">
+                                  <input
+                                    type="number"
+                                    step="0.25"
+                                    min="1.0"
+                                    max="5.0"
+                                    placeholder="—"
+                                    disabled={!canEdit || isSaving}
+                                    value={inp.midtermGrade ?? ''}
+                                    onChange={(e) =>
+                                      handleGradeChange(entry.studentId, 'midtermGrade', e.target.value)
+                                    }
+                                    className="w-14 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-1 text-center font-mono text-xs focus:border-accent focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-900/50"
+                                  />
+                                </td>
+                                <td className="py-2.5 px-1.5 text-center">
+                                  <input
+                                    type="number"
+                                    step="0.25"
+                                    min="1.0"
+                                    max="5.0"
+                                    placeholder="—"
+                                    disabled={!canEdit || isSaving}
+                                    value={inp.preFinalGrade ?? ''}
+                                    onChange={(e) =>
+                                      handleGradeChange(entry.studentId, 'preFinalGrade', e.target.value)
+                                    }
+                                    className="w-14 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-1 text-center font-mono text-xs focus:border-accent focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-900/50"
+                                  />
+                                </td>
+                                <td className="py-2.5 px-1.5 text-center">
+                                  <input
+                                    type="number"
+                                    step="0.25"
+                                    min="1.0"
+                                    max="5.0"
+                                    placeholder="—"
+                                    disabled={!canEdit || isSaving}
+                                    value={inp.finalGrade ?? ''}
+                                    onChange={(e) =>
+                                      handleGradeChange(entry.studentId, 'finalGrade', e.target.value)
+                                    }
+                                    className="w-14 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white py-1 text-center font-mono text-xs focus:border-accent focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-900/50"
+                                  />
+                                </td>
 
-                                  {/* Save Button */}
-                                  <td className="py-2.5 px-2 text-center">
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      disabled={!canEdit || isSaving}
-                                      loading={isSaving}
-                                      onClick={() => handleSaveGrade(entry.studentId)}
-                                      className="text-xs px-2 py-1"
-                                      title="Save Grades"
-                                    >
-                                      <Save className="h-3 w-3" />
-                                    </Button>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
+                                {/* Computed columns */}
+                                <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300">
+                                  {formatGrade(gr?.computedMidterm)}
+                                </td>
+                                <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300">
+                                  {formatGrade(gr?.computedFinal)}
+                                </td>
+                                <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900 dark:text-white">
+                                  {formatGrade(gr?.overallGrade)}
+                                </td>
+
+                                {/* Remarks */}
+                                <td className="py-2.5 px-2 text-center">
+                                  {remarks ? (
+                                    <Badge value={remarks}>{remarks}</Badge>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400">Pending</span>
+                                  )}
+                                </td>
+
+                                {/* Save Button */}
+                                <td className="py-2.5 px-2 text-center">
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={!canEdit || isSaving}
+                                    loading={isSaving}
+                                    onClick={() => handleSaveGrade(entry.studentId)}
+                                    className="text-xs px-2 py-1"
+                                    title="Save Grades"
+                                  >
+                                    <Save className="h-3 w-3" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </DataTable>
+                      )}
+                    </div>
+                  )}
                 </Card>
               )}
             </div>

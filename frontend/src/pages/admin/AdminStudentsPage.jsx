@@ -35,6 +35,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
   EmptyState,
   Field,
   LoadingState,
@@ -514,115 +515,19 @@ export default function AdminStudentsPage() {
         </Card>
       ) : (
         <Card bodyClassName="p-0 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 select-none">
-                  {/* 1. Student / Applicant */}
-                  <th
-                    onClick={() => toggleSort('name')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Student Name (${sortField === 'name' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'name'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Student / Applicant
-                      </span>
-                      {renderSortIcon('name')}
-                    </div>
-                  </th>
-
-                  {/* 2. ID / Ref # */}
-                  <th
-                    onClick={() => toggleSort('studentNumber')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by ID / Ref # (${sortField === 'studentNumber' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'studentNumber'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        ID / Ref #
-                      </span>
-                      {renderSortIcon('studentNumber')}
-                    </div>
-                  </th>
-
-                  {/* 3. Course & Year */}
-                  <th
-                    onClick={() => toggleSort('course')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Course & Year (${sortField === 'course' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'course'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Course & Year
-                      </span>
-                      {renderSortIcon('course')}
-                    </div>
-                  </th>
-
-                  {/* 4. Status */}
-                  <th
-                    onClick={() => toggleSort('admissionStatus')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Status (${sortField === 'admissionStatus' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'admissionStatus'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Status
-                      </span>
-                      {renderSortIcon('admissionStatus')}
-                    </div>
-                  </th>
-
-                  {/* 5. Date Submitted */}
-                  <th
-                    onClick={() => toggleSort('submittedAt')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Date Submitted (${sortField === 'submittedAt' ? (sortDirection === 'asc' ? 'Oldest → Newest' : 'Default') : 'Newest → Oldest'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'submittedAt'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Date Submitted
-                      </span>
-                      {renderSortIcon('submittedAt')}
-                    </div>
-                  </th>
-
-                  {/* 6. Actions */}
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          <DataTable
+            columns={[
+              { key: 'name', label: 'Student / Applicant', sortable: true, sortType: 'text' },
+              { key: 'studentNumber', label: 'ID / Ref #', sortable: true, sortType: 'text' },
+              { key: 'course', label: 'Course & Year', sortable: true, sortType: 'text' },
+              { key: 'admissionStatus', label: 'Status', sortable: true, sortType: 'text' },
+              { key: 'submittedAt', label: 'Date Submitted', sortable: true, sortType: 'text' },
+              { key: 'actions', label: 'Actions', align: 'right' },
+            ]}
+            sortKey={sortField}
+            sortDir={sortDirection}
+            onSort={(key) => toggleSort(key)}
+          >
             {filteredStudents.map((s) => {
                   const isPending = s.admissionStatus === 'PENDING'
                   const isAdmitted = s.admissionStatus === 'ADMITTED'
@@ -726,9 +631,7 @@ export default function AdminStudentsPage() {
                     </tr>
                   )
                 })}
-              </tbody>
-            </table>
-          </div>
+          </DataTable>
         </Card>
       )}
 

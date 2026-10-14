@@ -174,29 +174,14 @@ export function EmptyState({ icon: Icon, title, children }) {
   )
 }
 
-/** Table wrapper with consistent header and row styling. `columns` is a list of header labels. */
-export function Table({ columns = [], children, footer }) {
+export { default as DataTable } from './common/DataTable/DataTable'
+
+/** Table wrapper with consistent header and row styling matching the gold standard Grade Page. */
+export function Table({ columns = [], children, footer, className = '' }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        {columns && columns.length > 0 && (
-          <thead>
-            <tr className="border-b border-slate-200 dark:border-slate-800 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              {columns.map((col) => (
-                <th
-                  key={typeof col === 'string' ? col : col.label}
-                  className={`whitespace-nowrap px-4 py-3 ${typeof col === 'object' && col.align === 'right' ? 'text-right' : ''}`}
-                >
-                  {typeof col === 'string' ? col : col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-        )}
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">{children}</tbody>
-        {footer && <tfoot className="border-t border-slate-200 dark:border-slate-800">{footer}</tfoot>}
-      </table>
-    </div>
+    <DataTable columns={columns} footer={footer} className={className}>
+      {children}
+    </DataTable>
   )
 }
 

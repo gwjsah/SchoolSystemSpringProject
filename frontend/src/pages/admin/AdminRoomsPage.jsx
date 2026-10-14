@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
   EmptyState,
   ErrorState,
   Field,
@@ -392,7 +393,7 @@ export default function AdminRoomsPage() {
       </ConfirmDialog>
 
       {/* Table with interactive sort headers */}
-      <Card bodyClassName="p-0">
+      <Card bodyClassName="p-0 overflow-hidden">
         {filteredAndSortedList.length === 0 ? (
           <EmptyState icon={DoorOpen} title="No rooms match your filter">
             {searchQuery || selectedBuilding !== 'ALL'
@@ -400,124 +401,57 @@ export default function AdminRoomsPage() {
               : 'No rooms configured yet.'}
           </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 select-none">
-                  <th
-                    onClick={() => toggleSort('roomName')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Room Name (${sortField === 'roomName' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'roomName'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Room Name
-                      </span>
-                      {renderSortIcon('roomName')}
-                    </div>
-                  </th>
-
-                  <th
-                    onClick={() => toggleSort('roomType')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Type (${sortField === 'roomType' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'roomType'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Type
-                      </span>
-                      {renderSortIcon('roomType')}
-                    </div>
-                  </th>
-
-                  <th
-                    onClick={() => toggleSort('capacity')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Capacity (${sortField === 'capacity' ? (sortDirection === 'asc' ? 'High → Low' : 'Default') : 'Low → High'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'capacity'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Capacity
-                      </span>
-                      {renderSortIcon('capacity')}
-                    </div>
-                  </th>
-
-                  <th
-                    onClick={() => toggleSort('isActive')}
-                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
-                    title={`Click to sort by Status (${sortField === 'isActive' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
-                          sortField === 'isActive'
-                            ? 'text-accent font-bold'
-                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
-                        }`}
-                      >
-                        Status
-                      </span>
-                      {renderSortIcon('isActive')}
-                    </div>
-                  </th>
-
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredAndSortedList.map((room) => (
-                  <tr key={room.id} className={!room.isActive ? 'bg-slate-50/50 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500' : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/40'}>
-                    <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono">{room.roomName}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Badge tone={room.roomType === 'LAB' ? 'blue' : 'slate'}>{labelize(room.roomType)}</Badge>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-slate-700 dark:text-slate-300">{room.capacity} seats</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {room.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>}
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(room)} title="Edit room">
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(room)}
-                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
-                          title="Delete room"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: 'roomName', label: 'Room Name', sortable: true, sortType: 'text' },
+              { key: 'roomType', label: 'Type', sortable: true, sortType: 'text' },
+              { key: 'capacity', label: 'Capacity', sortable: true, sortType: 'number' },
+              { key: 'isActive', label: 'Status', sortable: true, sortType: 'text' },
+              { key: 'actions', label: 'Actions', align: 'right' },
+            ]}
+            sortKey={sortField}
+            sortDir={sortDirection}
+            onSort={(key) => toggleSort(key)}
+          >
+            {filteredAndSortedList.map((room) => (
+              <tr
+                key={room.id}
+                className={
+                  !room.isActive
+                    ? 'bg-slate-50/50 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors'
+                    : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors'
+                }
+              >
+                <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono">{room.roomName}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <Badge tone={room.roomType === 'LAB' ? 'blue' : 'slate'}>{labelize(room.roomType)}</Badge>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-slate-700 dark:text-slate-300">{room.capacity} seats</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {room.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>}
+                </td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <div className="flex items-center justify-end gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(room)} title="Edit room">
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(room)}
+                      className="rounded p-1.5 text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+                      title="Delete room"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </DataTable>
         )}
       </Card>
     </div>
