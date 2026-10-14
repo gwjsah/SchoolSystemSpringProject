@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   BookOpen,
   Plus,
   Edit2,
@@ -41,8 +44,45 @@ export default function AdminSubjectsPage() {
   const [courseFilter, setCourseFilter] = useState('ALL')
   const [yearFilter, setYearFilter] = useState('ALL')
   const [semesterFilter, setSemesterFilter] = useState('ALL')
-  const [sortField, setSortField] = useState('subjectCode') // 'subjectCode' | 'subjectName' | 'yearLevel' | 'units'
-  const [sortDirection, setSortDirection] = useState('asc')
+  const [sortField, setSortField] = useState(null)
+  const [sortDirection, setSortDirection] = useState(null)
+
+  const toggleSort = (field) => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else {
+        setSortField(null)
+        setSortDirection(null)
+      }
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const renderSortIcon = (field) => {
+    const isActive = sortField === field
+    return (
+      <span
+        className={`inline-flex items-center justify-center rounded p-1 transition-all ${
+          isActive
+            ? 'bg-accent text-white shadow-xs'
+            : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'
+        }`}
+      >
+        {isActive ? (
+          sortDirection === 'asc' ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-60" />
+        )}
+      </span>
+    )
+  }
 
   // Modals
   const [modalOpen, setModalOpen] = useState(false)
@@ -105,18 +145,20 @@ export default function AdminSubjectsPage() {
       list = list.filter((s) => s.semester === semesterFilter)
     }
 
-    list.sort((a, b) => {
-      let valA = a[sortField] ?? ''
-      let valB = b[sortField] ?? ''
+    if (sortField && sortDirection) {
+      list.sort((a, b) => {
+        let valA = a[sortField] ?? ''
+        let valB = b[sortField] ?? ''
 
-      if (sortField === 'yearLevel' || sortField === 'units') {
-        return sortDirection === 'asc' ? valA - valB : valB - valA
-      }
+        if (sortField === 'yearLevel') {
+          return sortDirection === 'asc' ? Number(valA) - Number(valB) : Number(valB) - Number(valA)
+        }
 
-      return sortDirection === 'asc'
-        ? String(valA).localeCompare(String(valB))
-        : String(valB).localeCompare(String(valA))
-    })
+        return sortDirection === 'asc'
+          ? String(valA).localeCompare(String(valB), undefined, { sensitivity: 'base' })
+          : String(valB).localeCompare(String(valA), undefined, { sensitivity: 'base' })
+      })
+    }
 
     return list
   }, [subjectList, searchQuery, courseFilter, yearFilter, semesterFilter, sortField, sortDirection])
@@ -394,9 +436,33 @@ export default function AdminSubjectsPage() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  <th className="px-4 py-3">Subject Code</th>
-                  <th className="px-4 py-3">Subject Name</th>
-                  <th className="px-4 py-3">Year & Term</th>
+                  <th
+                    className="px-4 py-3 cursor-pointer select-none group hover:text-slate-900 dark:hover:text-white transition-colors"
+                    onClick={() => toggleSort('subjectCode')}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={sortField === 'subjectCode' ? 'text-accent font-bold' : ''}>Subject Code</span>
+                      {renderSortIcon('subjectCode')}
+                    </div>
+                  </th>
+                  <th
+                    className="px-4 py-3 cursor-pointer select-none group hover:text-slate-900 dark:hover:text-white transition-colors"
+                    onClick={() => toggleSort('subjectName')}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={sortField === 'subjectName' ? 'text-accent font-bold' : ''}>Subject Name</span>
+                      {renderSortIcon('subjectName')}
+                    </div>
+                  </th>
+                  <th
+                    className="px-4 py-3 cursor-pointer select-none group hover:text-slate-900 dark:hover:text-white transition-colors"
+                    onClick={() => toggleSort('yearLevel')}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={sortField === 'yearLevel' ? 'text-accent font-bold' : ''}>Year & Term</span>
+                      {renderSortIcon('yearLevel')}
+                    </div>
+                  </th>
                   <th className="px-4 py-3">Units</th>
                   <th className="px-4 py-3">Assigned Faculty</th>
                   <th className="px-4 py-3">Prerequisites</th>

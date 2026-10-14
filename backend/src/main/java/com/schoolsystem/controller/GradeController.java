@@ -38,7 +38,7 @@ public class GradeController {
     @GetMapping("/my")
     @PreAuthorize("hasRole('STUDENT')")
     public List<GradeDto> myGrades(@AuthenticationPrincipal AuthUser user) {
-        return gradeService.getGradesForStudent(user.id()).stream().map(DtoMapper::grade).toList();
+        return gradeService.getGradesForStudent(user.id());
     }
 
     /** Enrolled students of a section and their grades. Faculty see only their own sections. */

@@ -1,13 +1,19 @@
 package com.schoolsystem.service;
 
+import com.schoolsystem.dto.DtoMapper;
+import com.schoolsystem.dto.Responses.GradeDto;
 import com.schoolsystem.exception.NotFoundException;
 
 import com.schoolsystem.entity.Enrollment;
 import com.schoolsystem.entity.enums.Status;
 import com.schoolsystem.repository.EnrollmentRepository;
 import org.springframework.security.access.AccessDeniedException;
+
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.schoolsystem.entity.CompletedSubject;
@@ -123,12 +129,12 @@ public class GradeService {
     }
 
     /**
-     * Lower is better: 1.0 is the highest mark and 3.0 the lowest passing mark (every completed
+     * Higher is better: 5.0 is the highest mark and 3.0 the lowest passing mark (every completed
      * subject in the old data is between 1.25 and 2.0). The old code tested overall >= 3.0, which
      * would call 3.75 or 4.0 passed. To restore the old rule, change <= to >= below.
      */
     public static boolean isPassing(Double overallGrade) {
-        return overallGrade != null && overallGrade <= PASSING_GRADE;
+        return overallGrade != null && overallGrade >= PASSING_GRADE;
     }
 
     // ── REMARKS ───────────────────────────────────────────────────────────────
@@ -170,8 +176,81 @@ public class GradeService {
     public record RosterEntry(Enrollment enrollment, Grade grade) {}
 
     @Transactional(readOnly = true)
-    public List<Grade> getGradesForStudent(String studentId) {
-        return gradeRepository.findByStudent_Id(studentId);
+    public List<GradeDto> getGradesForStudent(String studentId) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new NotFoundException("Student not found"));
+
+        List<Grade> existingGrades = gradeRepository.findByStudent_Id(studentId);
+        List<GradeDto> result = new ArrayList<>();
+
+        Set<String> coveredSectionIds = new HashSet<>();
+        Set<String> coveredSubjTermKeys = new HashSet<>();
+
+        for (Grade g : existingGrades) {
+            result.add(DtoMapper.grade(g));
+            if (g.getSection() != null) {
+                coveredSectionIds.add(g.getSection().getId());
+            }
+            if (g.getSubject() != null && g.getSemester() != null && g.getSchoolYear() != null) {
+                coveredSubjTermKeys.add(g.getSubject().getSubjectCode() + "|" + g.getSemester() + "|" + g.getSchoolYear());
+            }
+        }
+
+        // Include all enrolled subjects that do not have a Grade record yet
+        List<Enrollment> enrollments = enrollmentRepository.findByStudent_Id(studentId);
+        for (Enrollment e : enrollments) {
+            if (e.getStatus() == Status.DROPPED) {
+                continue;
+            }
+            String sectionId = e.getSection() != null ? e.getSection().getId() : null;
+            String subjTermKey = e.getSubject() != null && e.getSemester() != null && e.getSchoolYear() != null
+                    ? e.getSubject().getSubjectCode() + "|" + e.getSemester() + "|" + e.getSchoolYear()
+                    : null;
+
+            if (sectionId != null && coveredSectionIds.contains(sectionId)) {
+                continue;
+            }
+            if (subjTermKey != null && coveredSubjTermKeys.contains(subjTermKey)) {
+                continue;
+            }
+
+            String teacherName = null;
+            if (e.getSection() != null && e.getSection().getFaculty() != null) {
+                teacherName = e.getSection().getFaculty().getName();
+            }
+            int units = e.getSubject() != null ? e.getSubject().getUnits() : 0;
+            String sectionCode = e.getSection() != null ? e.getSection().getSectionCode() : "—";
+            String subjectCode = e.getSubject() != null ? e.getSubject().getSubjectCode() : "—";
+            String subjectName = e.getSubject() != null ? e.getSubject().getSubjectName() : "—";
+
+            GradeDto placeholder = new GradeDto(
+                    "pending-" + e.getId(),
+                    student.getId(),
+                    student.getName(),
+                    sectionId,
+                    sectionCode,
+                    subjectCode,
+                    subjectName,
+                    e.getSemester(),
+                    e.getSchoolYear(),
+                    null, // prelimGrade
+                    null, // midtermGrade
+                    null, // preFinalGrade
+                    null, // finalGrade
+                    null, // computedMidterm
+                    null, // computedFinal
+                    null, // overallGrade
+                    null, // remarks
+                    null, // submittedAt
+                    units,
+                    teacherName
+            );
+            result.add(placeholder);
+            if (sectionId != null) coveredSectionIds.add(sectionId);
+            if (subjTermKey != null) coveredSubjTermKeys.add(subjTermKey);
+        }
+
+        return result;
     }
 
     /** Faculty can view only their own sections; admins can view any. */

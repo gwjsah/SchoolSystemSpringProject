@@ -177,13 +177,22 @@ public final class DtoMapper {
     }
 
     public static GradeDto grade(Grade g) {
+        String teacherName = null;
+        if (g.getSection() != null && g.getSection().getFaculty() != null) {
+            teacherName = g.getSection().getFaculty().getName();
+        }
+        int units = g.getSubject() != null ? g.getSubject().getUnits() : 0;
+
         return new GradeDto(g.getId(), g.getStudent().getId(), g.getStudent().getName(),
-                g.getSection().getId(), g.getSection().getSectionCode(),
-                g.getSubject().getSubjectCode(), g.getSubject().getSubjectName(),
+                g.getSection() != null ? g.getSection().getId() : null,
+                g.getSection() != null ? g.getSection().getSectionCode() : "—",
+                g.getSubject() != null ? g.getSubject().getSubjectCode() : "—",
+                g.getSubject() != null ? g.getSubject().getSubjectName() : "—",
                 g.getSemester(), g.getSchoolYear(),
                 g.getPrelimGrade(), g.getMidtermGrade(), g.getPreFinalGrade(), g.getFinalGrade(),
                 g.getComputedMidterm(), g.getComputedFinal(), g.getOverallGrade(),
-                GradeService.getRemarks(g.getOverallGrade()), g.getSubmittedAt());
+                GradeService.getRemarks(g.getOverallGrade()), g.getSubmittedAt(),
+                units, teacherName);
     }
 
     public static RosterEntryDto rosterEntry(GradeService.RosterEntry r) {

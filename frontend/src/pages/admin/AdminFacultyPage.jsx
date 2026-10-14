@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Award,
   BarChart2,
   BookOpen,
@@ -224,9 +227,50 @@ export default function AdminFacultyPage() {
     return Array.from(set).sort()
   }, [facultyList])
 
+  // Sort State (Name and Employee ID only)
+  const [sortField, setSortField] = useState(null)
+  const [sortDirection, setSortDirection] = useState(null)
+
+  const toggleSort = (field) => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else {
+        setSortField(null)
+        setSortDirection(null)
+      }
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const renderSortIcon = (field) => {
+    const isActive = sortField === field
+    return (
+      <span
+        className={`inline-flex items-center justify-center rounded p-1 transition-all ${
+          isActive
+            ? 'bg-accent text-white shadow-xs'
+            : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'
+        }`}
+      >
+        {isActive ? (
+          sortDirection === 'asc' ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-60" />
+        )}
+      </span>
+    )
+  }
+
   // Filtered List
   const filteredFaculty = useMemo(() => {
-    return facultyList.filter((f) => {
+    let result = facultyList.filter((f) => {
       if (departmentFilter !== 'ALL' && f.department !== departmentFilter)
         return false
       if (positionFilter !== 'ALL' && f.position !== positionFilter)
@@ -251,7 +295,27 @@ export default function AdminFacultyPage() {
       }
       return true
     })
-  }, [facultyList, departmentFilter, positionFilter, activeTabFilter, search])
+
+    if (sortField && sortDirection) {
+      result = [...result].sort((a, b) => {
+        let valA = ''
+        let valB = ''
+
+        if (sortField === 'name') {
+          valA = (a.name || '').toLowerCase()
+          valB = (b.name || '').toLowerCase()
+        } else if (sortField === 'employeeNumber') {
+          valA = (a.employeeNumber || '').toLowerCase()
+          valB = (b.employeeNumber || '').toLowerCase()
+        }
+
+        const comp = valA.localeCompare(valB, undefined, { sensitivity: 'base' })
+        return sortDirection === 'asc' ? comp : -comp
+      })
+    }
+
+    return result
+  }, [facultyList, departmentFilter, positionFilter, activeTabFilter, search, sortField, sortDirection])
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -584,16 +648,64 @@ export default function AdminFacultyPage() {
         </Card>
       ) : (
         <Card bodyClassName="p-0 overflow-hidden">
-          <Table
-            columns={[
-              'Faculty / Instructor',
-              'Employee ID',
-              'Department & Position',
-              'Assigned Sections',
-              'Qualified Subjects',
-              { label: 'Actions', align: 'right' },
-            ]}
-          >
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 select-none">
+                  {/* 1. Faculty / Instructor (Name) - sortable */}
+                  <th
+                    onClick={() => toggleSort('name')}
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Name (${sortField === 'name' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'name'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Faculty / Instructor
+                      </span>
+                      {renderSortIcon('name')}
+                    </div>
+                  </th>
+
+                  {/* 2. Employee ID - sortable */}
+                  <th
+                    onClick={() => toggleSort('employeeNumber')}
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Employee ID (${sortField === 'employeeNumber' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'employeeNumber'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Employee ID
+                      </span>
+                      {renderSortIcon('employeeNumber')}
+                    </div>
+                  </th>
+
+                  {/* 3. Department & Position - unsorted */}
+                  <th className="px-4 py-3 whitespace-nowrap">Department & Position</th>
+
+                  {/* 4. Assigned Sections - unsorted */}
+                  <th className="px-4 py-3 whitespace-nowrap">Assigned Sections</th>
+
+                  {/* 5. Qualified Subjects - unsorted */}
+                  <th className="px-4 py-3 whitespace-nowrap">Qualified Subjects</th>
+
+                  {/* 6. Actions - unsorted */}
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredFaculty.map((f) => {
               const secCount = f.sections?.length || 0
               const subjCount = f.assignedSubjects?.length || 0
@@ -708,8 +820,10 @@ export default function AdminFacultyPage() {
                 </tr>
               )
             })}
-          </Table>
-        </Card>
+          </tbody>
+        </table>
+      </div>
+    </Card>
       )}
 
       {/* ===================================================================== */}

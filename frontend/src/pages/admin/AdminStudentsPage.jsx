@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   BookOpen,
   Calendar,
   CheckCircle2,
@@ -116,9 +119,49 @@ export default function AdminStudentsPage() {
   const pendingCount = students.filter((s) => s.admissionStatus === 'PENDING').length
   const rejectedCount = students.filter((s) => s.admissionStatus === 'REJECTED').length
 
-  // Filtered List
+  // Filtered & Sorted List
+  const [sortField, setSortField] = useState(null)
+  const [sortDirection, setSortDirection] = useState(null)
+
+  const toggleSort = (field) => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else {
+        setSortField(null)
+        setSortDirection(null)
+      }
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const renderSortIcon = (field) => {
+    const isActive = sortField === field
+    return (
+      <span
+        className={`inline-flex items-center justify-center rounded p-1 transition-all ${
+          isActive
+            ? 'bg-accent text-white shadow-xs'
+            : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'
+        }`}
+      >
+        {isActive ? (
+          sortDirection === 'asc' ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-60" />
+        )}
+      </span>
+    )
+  }
+
   const filteredStudents = useMemo(() => {
-    return students.filter((s) => {
+    let result = students.filter((s) => {
       if (activeTab === 'pending' && s.admissionStatus !== 'PENDING') return false
       if (statusFilter !== 'ALL' && s.admissionStatus !== statusFilter) return false
       if (courseFilter !== 'ALL' && s.course !== courseFilter) return false
@@ -135,7 +178,37 @@ export default function AdminStudentsPage() {
       }
       return true
     })
-  }, [students, activeTab, statusFilter, courseFilter, yearFilter, search])
+
+    if (sortField && sortDirection) {
+      result = [...result].sort((a, b) => {
+        let valA
+        let valB
+
+        if (sortField === 'name') {
+          valA = (a.name || '').toLowerCase()
+          valB = (b.name || '').toLowerCase()
+        } else if (sortField === 'studentNumber') {
+          valA = (a.studentNumber || a.applicationNumber || '').toLowerCase()
+          valB = (b.studentNumber || b.applicationNumber || '').toLowerCase()
+        } else if (sortField === 'course') {
+          valA = `${a.course || ''}-${a.yearLevel || 0}`.toLowerCase()
+          valB = `${b.course || ''}-${b.yearLevel || 0}`.toLowerCase()
+        } else if (sortField === 'admissionStatus') {
+          valA = (a.admissionStatus || '').toLowerCase()
+          valB = (b.admissionStatus || '').toLowerCase()
+        } else if (sortField === 'submittedAt') {
+          valA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0
+          valB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0
+          return sortDirection === 'asc' ? valA - valB : valB - valA
+        }
+
+        const comp = String(valA || '').localeCompare(String(valB || ''), undefined, { sensitivity: 'base' })
+        return sortDirection === 'asc' ? comp : -comp
+      })
+    }
+
+    return result
+  }, [students, activeTab, statusFilter, courseFilter, yearFilter, search, sortField, sortDirection])
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -441,16 +514,115 @@ export default function AdminStudentsPage() {
         </Card>
       ) : (
         <Card bodyClassName="p-0 overflow-hidden">
-          <Table
-            columns={[
-              'Student / Applicant',
-              'ID / Ref #',
-              'Course & Year',
-              'Status',
-              'Date Submitted',
-              { label: 'Actions', align: 'right' },
-            ]}
-          >
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 select-none">
+                  {/* 1. Student / Applicant */}
+                  <th
+                    onClick={() => toggleSort('name')}
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Student Name (${sortField === 'name' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'name'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Student / Applicant
+                      </span>
+                      {renderSortIcon('name')}
+                    </div>
+                  </th>
+
+                  {/* 2. ID / Ref # */}
+                  <th
+                    onClick={() => toggleSort('studentNumber')}
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by ID / Ref # (${sortField === 'studentNumber' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'studentNumber'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        ID / Ref #
+                      </span>
+                      {renderSortIcon('studentNumber')}
+                    </div>
+                  </th>
+
+                  {/* 3. Course & Year */}
+                  <th
+                    onClick={() => toggleSort('course')}
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Course & Year (${sortField === 'course' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'course'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Course & Year
+                      </span>
+                      {renderSortIcon('course')}
+                    </div>
+                  </th>
+
+                  {/* 4. Status */}
+                  <th
+                    onClick={() => toggleSort('admissionStatus')}
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Status (${sortField === 'admissionStatus' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'admissionStatus'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Status
+                      </span>
+                      {renderSortIcon('admissionStatus')}
+                    </div>
+                  </th>
+
+                  {/* 5. Date Submitted */}
+                  <th
+                    onClick={() => toggleSort('submittedAt')}
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Date Submitted (${sortField === 'submittedAt' ? (sortDirection === 'asc' ? 'Oldest → Newest' : 'Default') : 'Newest → Oldest'})`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'submittedAt'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Date Submitted
+                      </span>
+                      {renderSortIcon('submittedAt')}
+                    </div>
+                  </th>
+
+                  {/* 6. Actions */}
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredStudents.map((s) => {
                   const isPending = s.admissionStatus === 'PENDING'
                   const isAdmitted = s.admissionStatus === 'ADMITTED'
@@ -554,7 +726,9 @@ export default function AdminStudentsPage() {
                     </tr>
                   )
                 })}
-          </Table>
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 

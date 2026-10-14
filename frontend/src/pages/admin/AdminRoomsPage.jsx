@@ -111,7 +111,12 @@ export default function AdminRoomsPage() {
 
   const toggleSort = (field) => {
     if (sortField === field) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else {
+        setSortField(null)
+        setSortDirection(null)
+      }
     } else {
       setSortField(field)
       setSortDirection('asc')
@@ -193,13 +198,25 @@ export default function AdminRoomsPage() {
   }
 
   const renderSortIcon = (field) => {
-    if (sortField !== field) {
-      return <ArrowUpDown className="h-3 w-3 text-slate-400 opacity-60" />
-    }
-    return sortDirection === 'asc' ? (
-      <ArrowUp className="h-3.5 w-3.5 text-accent font-bold" />
-    ) : (
-      <ArrowDown className="h-3.5 w-3.5 text-accent font-bold" />
+    const isActive = sortField === field
+    return (
+      <span
+        className={`inline-flex items-center justify-center rounded p-1 transition-all ${
+          isActive
+            ? 'bg-accent text-white shadow-xs'
+            : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'
+        }`}
+      >
+        {isActive ? (
+          sortDirection === 'asc' ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-60" />
+        )}
+      </span>
     )
   }
 
@@ -389,40 +406,76 @@ export default function AdminRoomsPage() {
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 select-none">
                   <th
                     onClick={() => toggleSort('roomName')}
-                    className="cursor-pointer px-4 py-3 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Room Name (${sortField === 'roomName' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>Room Name</span>
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'roomName'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Room Name
+                      </span>
                       {renderSortIcon('roomName')}
                     </div>
                   </th>
 
                   <th
                     onClick={() => toggleSort('roomType')}
-                    className="cursor-pointer px-4 py-3 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Type (${sortField === 'roomType' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>Type</span>
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'roomType'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Type
+                      </span>
                       {renderSortIcon('roomType')}
                     </div>
                   </th>
 
                   <th
                     onClick={() => toggleSort('capacity')}
-                    className="cursor-pointer px-4 py-3 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Capacity (${sortField === 'capacity' ? (sortDirection === 'asc' ? 'High → Low' : 'Default') : 'Low → High'})`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>Capacity</span>
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'capacity'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Capacity
+                      </span>
                       {renderSortIcon('capacity')}
                     </div>
                   </th>
 
                   <th
                     onClick={() => toggleSort('isActive')}
-                    className="cursor-pointer px-4 py-3 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="whitespace-nowrap px-4 py-3 cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
+                    title={`Click to sort by Status (${sortField === 'isActive' ? (sortDirection === 'asc' ? 'Z → A' : 'Default') : 'A → Z'})`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>Status</span>
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wider transition-colors ${
+                          sortField === 'isActive'
+                            ? 'text-accent font-bold'
+                            : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        Status
+                      </span>
                       {renderSortIcon('isActive')}
                     </div>
                   </th>

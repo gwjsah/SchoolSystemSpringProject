@@ -109,7 +109,8 @@ public final class Responses {
             String subjectCode, String subjectName, Semester semester, String schoolYear,
             Double prelimGrade, Double midtermGrade, Double preFinalGrade, Double finalGrade,
             Double computedMidterm, Double computedFinal, Double overallGrade,
-            String remarks, LocalDateTime submittedAt) {}
+            String remarks, LocalDateTime submittedAt,
+            Integer units, String teacherName) {}
 
     /** One enrolled student in a section, with their grade record if one exists yet. */
     public record RosterEntryDto(
