@@ -6,12 +6,11 @@ This document provides complete instructions, schema definitions, business rules
 
 ## 1. Executive Context & Current Database State
 
-### 1.1 Tables Currently Cleared (0 Records)
-The following tables are completely empty and need to be populated in the correct dependency order:
+### 1.1 Tables Currently Populated
 1. `rooms`
-2. `schedules`
-3. `sections`
-4. `section_schedules` (junction table)
+2. `section_blocks` (Section cohort entity: unique on `(course_code, year_level, section_code)`, capacity block-wide)
+3. `sections` (Individual subject class: references `block_id`, `subject_id`, `faculty_id`)
+4. `schedules` (Individual schedule slot: references `section_id`, `room_id`)
 5. `enrollments`
 6. `balances`
 7. `quarterly_schedules` (if quarterly payment plan is used)
@@ -19,15 +18,16 @@ The following tables are completely empty and need to be populated in the correc
 9. `completed_subjects`
 10. `grades`
 11. `faculty_evaluations`
+*(Note: junction table `section_schedules` has been permanently removed; schedules belong directly to `sections`).*
 
 ### 1.2 Tables Already Populated & Intact
 Do NOT truncate or recreate these tables. They contain production/seed data:
 - `accounts`, `admins`, `faculty`, `students` (user credentials and profiles)
 - `courses` (`BSIT`, `BSCS`, `BSIS`, `BSCpE`)
-- `subjects` (81 curriculum subjects mapped to course codes and prerequisites)
+- `subjects` (curriculum subjects mapped to course codes and prerequisites)
 - `announcements`
 - `admissions`
-- `enrollment_periods` (Current active period: typically `FIRST` Semester, `2024-2025` or `2025-2026`)
+- `enrollment_periods`
 - `grading_periods`
 
 ---
@@ -38,9 +38,10 @@ To respect Foreign Key (FK) constraints in MySQL, population **MUST** follow thi
 
 ```mermaid
 flowchart TD
-    Rooms["1. rooms"] --> Schedules["2. schedules (requires room_id)"]
-    Schedules --> Sections["3. sections (requires subject_id, faculty_id)"]
-    Sections --> SectionSchedules["4. section_schedules (section_id, schedule_id)"]
+    Rooms["1. rooms"] --> SectionBlocks["2. section_blocks (code, course, year, capacity)"]
+    SectionBlocks --> Sections["3. sections (block_id, subject_id, faculty_id)"]
+    Rooms --> Schedules["4. schedules (section_id, room_id)"]
+    Sections --> Schedules
     Sections --> Enrollments["5. enrollments (student_id, subject_id, section_id)"]
     Enrollments --> Balances["6. balances (student_id)"]
     Balances --> QuarterlySchedules["7. quarterly_schedules (balance_id)"]
@@ -187,18 +188,14 @@ Create non-overlapping time slots referencing the rooms created in Step 1.
 - Ensure end time is strictly greater than start time.
 - Verify no two schedules share the same `(room_id, day_of_week, startTime, endTime)` overlap.
 
-### Step 3: Populate `sections`
-Link existing subjects from `subjects` to faculty members from `faculty`.
-- Section codes must follow the curriculum convention (e.g. `IT-G1`, `IT-G2`, `CS-F1`, `CS-F2`).
-- Right now the system only have subjects for CS and IT, G code is for IT and F is for CS
-- Keep the number for sections low, meaning the number after F or G should only range from 1-10.
-- Different schedules accross the week can have the same Section Code as long as they do not overlap each other.
+### Step 3: Populate `section_blocks` & `sections`
+Link existing subjects from `subjects` to faculty members from `faculty`, grouped under a `section_blocks` parent.
+- Section codes repeat across academic year levels: e.g., Year 1 has `CS-F1` and `CS-F2`; Year 2 also has `CS-F1` and `CS-F2`.
+- A SectionBlock is uniquely identified by the triple: `(course_code, year_level, section_code)`.
+- Capacity is set block-wide on `section_blocks` (e.g. 40 seats).
+- Each `section` represents one subject's class inside that block (`block_id`, `subject_id`, `faculty_id`).
+- Schedules belong directly to each `section` (`schedules.section_id`), not via a junction table.
 - Check that the assigned faculty is not teaching another section during the same time.
-- Set `capacity` (e.g. 40), `current_count` (0 initially or matching enrollments), and `version = 0`.
-
-### Step 4: Populate `section_schedules`
-Associate each `section` with 1 or 2 `schedule` slots (e.g., MW or TTH pair).
-- Avoid multi-booking: Each schedule slot should belong to only one section.
 
 ### Step 5: Populate `enrollments` (Optional Seed)
 If seeding active enrollments:

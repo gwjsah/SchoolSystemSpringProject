@@ -57,12 +57,25 @@ public final class Requests {
     /** subjectCode is only used when creating a section. */
     public record SectionRequest(
             String sectionCode,
+            String blockId,
+            String courseCode,
+            Integer yearLevel,
             String subjectCode,
             @NotBlank String facultyId,
-            @Positive int capacity,
+            Integer capacity,
             @NotEmpty @Valid List<ScheduleRequest> schedules) {}
 
+    public record SectionBlockRequest(
+            @NotBlank String sectionCode,
+            @NotBlank String courseCode,
+            @Positive int yearLevel,
+            @Positive int capacity) {}
+
     public record BulkSectionRequest(
+            String blockCode,
+            String courseCode,
+            Integer yearLevel,
+            Integer capacity,
             @NotEmpty List<@Valid SectionRequest> sections) {}
 
     public record AddToCartRequest(@NotBlank String sectionId) {}

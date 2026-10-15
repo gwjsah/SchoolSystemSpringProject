@@ -11,10 +11,14 @@ import {
   Users,
   Building,
   RefreshCw,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import api, { getErrorMessage } from '../../api/client'
 import { Alert, Badge, Button, Field, inputClass } from '../../components/ui'
 import { formatTime } from '../../lib/format'
+import BlockTimetable from './BlockTimetable'
+import { toMinutes } from './blockTimetableHelpers'
 
 const WEEKDAYS = [
   { key: 'MONDAY', label: 'Monday', short: 'Mon' },
@@ -43,6 +47,9 @@ export default function BlockBuilderModal({
   subjects = [],
   facultyList = [],
   rooms = [],
+  schedules = [],
+  sections = [],
+  sectionBlocks = [],
 }) {
   // Course selection
   const distinctCourses = useMemo(() => {
@@ -60,7 +67,7 @@ export default function BlockBuilderModal({
   const [selectedYear, setSelectedYear] = useState(1)
   const [selectedSemester, setSelectedSemester] = useState('FIRST')
   const [blockName, setBlockName] = useState('')
-  const [defaultCapacity, setDefaultCapacity] = useState(35)
+  const [blockCapacity, setBlockCapacity] = useState(35)
 
   // Subject rows for the builder
   const [rows, setRows] = useState([])
@@ -69,6 +76,76 @@ export default function BlockBuilderModal({
   const [submitting, setSubmitting] = useState(false)
   const [modalError, setModalError] = useState(null)
 
+  // Active slot being placed on timetable: { subjectCode, slotType: 'LECTURE' | 'LAB', rowIdx }
+  const [activeSlot, setActiveSlot] = useState(null)
+
+  // Add extra subject selector state
+  const [showAddSubject, setShowAddSubject] = useState(false)
+  const [extraSubjectCode, setExtraSubjectCode] = useState('')
+
+  // Auto-select first row's Lecture slot when rows load (Option A)
+  useEffect(() => {
+    if (rows.length > 0) {
+      setActiveSlot((prev) => {
+        if (prev && rows.some((r, i) => i === prev.rowIdx && r.subjectCode === prev.subjectCode)) {
+          return prev
+        }
+        return {
+          subjectCode: rows[0].subjectCode,
+          slotType: 'LECTURE',
+          rowIdx: 0,
+        }
+      })
+    } else {
+      setActiveSlot(null)
+    }
+  }, [rows])
+
+  // Look up if block matches an existing block in database by (course, year, code)
+  const matchedExistingBlock = useMemo(() => {
+    if (!blockName?.trim() || !selectedCourse || !selectedYear) return null
+    const target = blockName.trim().toUpperCase()
+    const course = selectedCourse.trim().toUpperCase()
+    const year = Number(selectedYear)
+    return sectionBlocks.find(
+      (b) =>
+        b.sectionCode?.toUpperCase() === target &&
+        b.courseCode?.toUpperCase() === course &&
+        Number(b.yearLevel) === year
+    )
+  }, [blockName, selectedCourse, selectedYear, sectionBlocks])
+
+  // Lock capacity to existing block value if matched
+  useEffect(() => {
+    if (matchedExistingBlock) {
+      setBlockCapacity(matchedExistingBlock.capacity)
+    }
+  }, [matchedExistingBlock])
+
+  // Existing classes already saved under this block (excluding draft rows being edited)
+  const existingBlockSlots = useMemo(() => {
+    if (!matchedExistingBlock || !matchedExistingBlock.classes) return []
+    const slots = []
+    const currentSubjectCodes = new Set(rows.map((r) => r.subjectCode))
+    for (const cls of matchedExistingBlock.classes) {
+      if (currentSubjectCodes.has(cls.subjectCode)) continue
+      for (const s of cls.schedules || []) {
+        if (!s.day || !s.startTime || !s.endTime) continue
+        slots.push({
+          subjectCode: cls.subjectCode,
+          sectionCode: cls.sectionCode,
+          day: s.day,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          startMin: toMinutes(s.startTime),
+          endMin: toMinutes(s.endTime),
+          slotType: s.slotType || 'LECTURE',
+        })
+      }
+    }
+    return slots
+  }, [matchedExistingBlock, rows])
+
   // Initialize selected course
   useEffect(() => {
     if (!selectedCourse && distinctCourses.length > 0) {
@@ -76,7 +153,7 @@ export default function BlockBuilderModal({
     }
   }, [distinctCourses, selectedCourse])
 
-  // Update default block name when course, year, or semester changes
+  // Update default block name when course or year changes
   useEffect(() => {
     if (selectedCourse) {
       setBlockName(`${selectedCourse}-${selectedYear}A`)
@@ -118,10 +195,9 @@ export default function BlockBuilderModal({
         subjectCode: subj.subjectCode,
         subjectName: subj.subjectName,
         units: subj.units,
+        course: subj.course,
         assignedFaculty: subj.assignedFaculty || [],
-        sectionCode: blockName || `${selectedCourse}-${selectedYear}A`,
         facultyId: defaultFacId,
-        capacity: defaultCapacity,
         lecture: {
           enabled: true,
           day: lecDay,
@@ -131,7 +207,6 @@ export default function BlockBuilderModal({
           slotType: 'LECTURE',
         },
         lab: {
-          // Defaults: every subject gets lecture + lab; untickable for lecture-only subjects
           enabled: true,
           day: labDay,
           startTime: labStart,
@@ -146,32 +221,6 @@ export default function BlockBuilderModal({
     setValidationResult(null)
     setModalError(null)
   }, [selectedCourse, selectedYear, selectedSemester, subjects])
-
-  // When blockName changes, update all rows' sectionCode
-  const handleBlockNameChange = (newVal) => {
-    const upper = newVal.toUpperCase()
-    setBlockName(upper)
-    setRows((prev) =>
-      prev.map((r) => ({
-        ...r,
-        sectionCode: upper,
-      }))
-    )
-    setValidationResult(null)
-  }
-
-  // When defaultCapacity changes, update all rows' capacity
-  const handleDefaultCapacityChange = (newCap) => {
-    const val = Number(newCap)
-    setDefaultCapacity(val)
-    setRows((prev) =>
-      prev.map((r) => ({
-        ...r,
-        capacity: val,
-      }))
-    )
-    setValidationResult(null)
-  }
 
   const updateRowField = (index, field, value) => {
     setRows((prev) => {
@@ -197,9 +246,104 @@ export default function BlockBuilderModal({
     setValidationResult(null)
   }
 
-  // Build the payload for validate or submit
+  // Timetable placement update handler
+  const handleUpdateSlotTime = (rowIdx, slotType, { day, startTime, endTime }) => {
+    setRows((prev) => {
+      const copy = [...prev]
+      if (!copy[rowIdx]) return prev
+      const key = slotType === 'LECTURE' ? 'lecture' : 'lab'
+      copy[rowIdx] = {
+        ...copy[rowIdx],
+        [key]: {
+          ...copy[rowIdx][key],
+          day,
+          startTime,
+          endTime,
+        },
+      }
+      return copy
+    })
+    setValidationResult(null)
+  }
+
+  // Timetable slot click selector
+  const handleSelectSlotByKey = (slotKey) => {
+    const lastDash = slotKey.lastIndexOf('-')
+    if (lastDash === -1) return
+    const code = slotKey.slice(0, lastDash)
+    const type = slotKey.slice(lastDash + 1)
+    const idx = rows.findIndex((r) => r.subjectCode === code)
+    if (idx !== -1) {
+      setActiveSlot({
+        subjectCode: code,
+        slotType: type,
+        rowIdx: idx,
+      })
+    }
+  }
+
+  const removeRow = (index) => {
+    setRows((prev) => prev.filter((_, i) => i !== index))
+    setValidationResult(null)
+  }
+
+  const handleAddExtraSubject = () => {
+    if (!extraSubjectCode) return
+    const subj = subjects.find((s) => s.subjectCode === extraSubjectCode)
+    if (!subj) return
+
+    if (rows.some((r) => r.subjectCode === subj.subjectCode)) {
+      setModalError(`Subject ${subj.subjectCode} is already included in this block.`)
+      return
+    }
+
+    const i = rows.length
+    const lecDay = WEEKDAYS[i % WEEKDAYS.length].key
+    const labDay = WEEKDAYS[(i + 2) % WEEKDAYS.length].key
+
+    const defaultFacId = subj.assignedFaculty && subj.assignedFaculty.length > 0
+      ? subj.assignedFaculty[0].id
+      : ''
+
+    const newRow = {
+      subjectCode: subj.subjectCode,
+      subjectName: subj.subjectName,
+      units: subj.units,
+      course: subj.course,
+      assignedFaculty: subj.assignedFaculty || [],
+      facultyId: defaultFacId,
+      lecture: {
+        enabled: true,
+        day: lecDay,
+        startTime: '10:00',
+        endTime: '12:00',
+        roomId: 'AUTO',
+        slotType: 'LECTURE',
+      },
+      lab: {
+        enabled: true,
+        day: labDay,
+        startTime: '13:00',
+        endTime: '16:00',
+        roomId: 'AUTO',
+        slotType: 'LAB',
+      },
+    }
+
+    setRows((prev) => [...prev, newRow])
+    setExtraSubjectCode('')
+    setShowAddSubject(false)
+    setValidationResult(null)
+    setModalError(null)
+  }
+
+  // Build payload for validate or submit
   const buildPayload = () => {
     return {
+      blockCode: blockName?.trim().toUpperCase(),
+      courseCode: selectedCourse,
+      yearLevel: Number(selectedYear),
+      capacity: Number(blockCapacity),
       sections: rows.map((r) => {
         const schedules = []
         if (r.lecture.enabled) {
@@ -221,10 +365,8 @@ export default function BlockBuilderModal({
           })
         }
         return {
-          sectionCode: r.sectionCode?.trim() || null,
           subjectCode: r.subjectCode,
           facultyId: r.facultyId,
-          capacity: Number(r.capacity),
           schedules,
         }
       }),
@@ -243,7 +385,7 @@ export default function BlockBuilderModal({
         setModalError(null)
       } else {
         const errCount = (res.data.items || []).filter((i) => !i.valid).length
-        setModalError(`Validation found issues in ${errCount} section(s). Please review the notices below.`)
+        setModalError(`Validation found issues in ${errCount} class(es). Please review the notices below.`)
       }
     } catch (err) {
       setModalError(getErrorMessage(err))
@@ -263,21 +405,22 @@ export default function BlockBuilderModal({
         setModalError(`Subject ${r.subjectCode} has no instructor selected. Please assign an instructor.`)
         return
       }
-      if (!r.sectionCode) {
-        setModalError(`Subject ${r.subjectCode} must have a Section Code.`)
-        return
-      }
       if (!r.lecture.enabled && !r.lab.enabled) {
         setModalError(`Subject ${r.subjectCode} must have at least one meeting slot (Lecture or Lab).`)
         return
       }
     }
 
+    if (!blockName?.trim()) {
+      setModalError('Block Section Code is required.')
+      return
+    }
+
     setSubmitting(true)
     try {
       const payload = buildPayload()
       const res = await api.post('/sections/bulk', payload)
-      onSuccess?.(`Successfully created ${res.data.length} sections for Block ${blockName}!`)
+      onSuccess?.(`Successfully created ${res.data.length} class sections for Block ${blockName}!`)
       onClose()
     } catch (err) {
       setModalError(getErrorMessage(err))
@@ -285,6 +428,12 @@ export default function BlockBuilderModal({
       setSubmitting(false)
     }
   }
+
+  // Available subjects for the "+ Add Cross-Course Subject" selector
+  const availableExtraSubjects = useMemo(() => {
+    const includedCodes = new Set(rows.map((r) => r.subjectCode))
+    return subjects.filter((s) => !includedCodes.has(s.subjectCode))
+  }, [subjects, rows])
 
   if (!isOpen) return null
 
@@ -294,7 +443,7 @@ export default function BlockBuilderModal({
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
         onClick={() => !submitting && onClose()}
       />
-      <div className="relative w-full max-w-6xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl text-slate-900 dark:text-slate-100 overflow-hidden">
+      <div className="relative w-full max-w-[96vw] xl:max-w-[1600px] h-[94vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl text-slate-900 dark:text-slate-100 overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -306,7 +455,7 @@ export default function BlockBuilderModal({
                 Course Block Builder
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Bulk create all class sections for a course cohort with smart auto-room allocation.
+                Bulk create a Section Block with block-wide capacity, non-overlapping schedules, and auto-assigned rooms.
               </p>
             </div>
           </div>
@@ -323,9 +472,9 @@ export default function BlockBuilderModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {modalError && <Alert type="error">{modalError}</Alert>}
 
-          {/* Block Configuration Top Bar */}
+          {/* Block Configuration Header Controls */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {/* Course */}
+            {/* 1. Course */}
             <div>
               <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">
                 Course / Program
@@ -343,7 +492,7 @@ export default function BlockBuilderModal({
               </select>
             </div>
 
-            {/* Year Level */}
+            {/* 2. Year Level */}
             <div>
               <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">
                 Year Level
@@ -360,7 +509,7 @@ export default function BlockBuilderModal({
               </select>
             </div>
 
-            {/* Semester */}
+            {/* 3. Semester */}
             <div>
               <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">
                 Semester
@@ -376,38 +525,64 @@ export default function BlockBuilderModal({
               </select>
             </div>
 
-            {/* Block Name / Section Code */}
+            {/* 4. Block / Section Code */}
             <div>
-              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">
-                Block / Section Code
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider block">
+                  Section Code (Block)
+                </label>
+                {matchedExistingBlock && (
+                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">
+                    Existing Block
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 value={blockName}
-                onChange={(e) => handleBlockNameChange(e.target.value)}
-                placeholder="e.g. BSCS-1A"
+                disabled={!selectedCourse || !selectedYear}
+                onChange={(e) => {
+                  setBlockName(e.target.value.toUpperCase())
+                  setValidationResult(null)
+                }}
+                placeholder={!selectedCourse || !selectedYear ? "Select Course & Year first" : "e.g. CS-F1"}
                 className={inputClass}
+                required
               />
+              {matchedExistingBlock && (
+                <p className="text-[10px] text-indigo-600 dark:text-indigo-400 mt-1 font-medium">
+                  Adding to existing {matchedExistingBlock.courseCode} · Year {matchedExistingBlock.yearLevel} block. Capacity locked to {matchedExistingBlock.capacity} seats.
+                </p>
+              )}
             </div>
 
-            {/* Default Capacity */}
+            {/* 5. Block Capacity */}
             <div>
               <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">
-                Default Capacity
+                Block Capacity {matchedExistingBlock && <span className="text-slate-400 font-normal">(Locked)</span>}
               </label>
               <input
                 type="number"
                 min="1"
                 max="50"
-                value={defaultCapacity}
-                onChange={(e) => handleDefaultCapacityChange(e.target.value)}
+                value={blockCapacity}
+                disabled={Boolean(matchedExistingBlock)}
+                onChange={(e) => {
+                  setBlockCapacity(Number(e.target.value))
+                  setValidationResult(null)
+                }}
                 className={inputClass}
+                required
               />
             </div>
           </div>
 
-          {/* Validation Banner if validated */}
-          {validationResult && (
+          {/* Main Two-Column Layout (Offerings on Left, Timetable on Right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Offerings & Controls */}
+            <div className="lg:col-span-6 xl:col-span-6 space-y-4">
+              {/* Validation Banner if validated */}
+              {validationResult && (
             <div
               className={`rounded-xl border p-4 text-xs ${
                 validationResult.valid
@@ -430,35 +605,89 @@ export default function BlockBuilderModal({
               </div>
               <p className="mt-1 text-slate-600 dark:text-slate-300">
                 {validationResult.valid
-                  ? `All ${rows.length} sections validated with zero faculty double-bookings or room capacity violations.`
+                  ? `All ${rows.length} class offerings validated with zero internal schedule overlaps, room clashes, or faculty double-bookings.`
                   : 'Please resolve the highlighted instructor or schedule slot conflicts below before proceeding.'}
               </p>
             </div>
           )}
 
-          {/* Subject Rows Header / Guidance */}
+          {/* Subject Rows Header */}
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <BookOpen className="h-4 w-4 text-accent" />
-                Subjects in this Block ({rows.length})
+                Classes in this Section Block ({rows.length})
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Each subject is scheduled with a Lecture and optional Lab slot. Rooms marked "Auto" are dynamically assigned to the best-fit room.
+                Each subject gets a Lecture and optional Lab slot with block-wide capacity ({blockCapacity} seats). Rooms set to "Auto" are dynamically allocated.
               </p>
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={handleValidate}
-              loading={validating}
-              className="gap-1.5 text-xs"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Validate & Preview Rooms
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowAddSubject(true)}
+                className="gap-1.5 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Extra Subject
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleValidate}
+                loading={validating}
+                className="gap-1.5 text-xs"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Validate & Preview
+              </Button>
+            </div>
           </div>
+
+          {/* Add Extra Subject Selector Drawer/Box */}
+          {showAddSubject && (
+            <div className="rounded-xl border border-accent/40 bg-accent/5 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Add Subject from Any Course
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowAddSubject(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <select
+                    value={extraSubjectCode}
+                    onChange={(e) => setExtraSubjectCode(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">-- Select Subject from Catalog --</option>
+                    {availableExtraSubjects.map((s) => (
+                      <option key={s.subjectCode} value={s.subjectCode}>
+                        [{s.course}] {s.subjectCode} — {s.subjectName} ({s.units} units, Year {s.yearLevel})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleAddExtraSubject}
+                  disabled={!extraSubjectCode}
+                >
+                  Add to Block
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Empty state if no subjects found */}
           {rows.length === 0 ? (
@@ -468,7 +697,7 @@ export default function BlockBuilderModal({
                 No subjects found for {selectedCourse} {selectedYear} Year ({selectedSemester} Semester).
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                You can create subjects in the Academic Subjects catalog or select a different course/semester.
+                You can click "Add Extra Subject" above to include cross-course subjects or select a different program.
               </p>
             </div>
           ) : (
@@ -490,10 +719,10 @@ export default function BlockBuilderModal({
                         : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                     } p-4 text-xs shadow-xs space-y-3.5`}
                   >
-                    {/* Row Header: Subject info, Section Code, Faculty Picker, Capacity */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                    {/* Row Header: Subject info, Assigned Faculty Picker, Remove */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       {/* Subject Information */}
-                      <div className="md:col-span-4">
+                      <div className="flex-1 min-w-[280px]">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-slate-900 dark:text-white text-sm">
                             {row.subjectCode}
@@ -501,6 +730,11 @@ export default function BlockBuilderModal({
                           <Badge variant="outline" size="sm">
                             {row.units} units
                           </Badge>
+                          {row.course && (
+                            <Badge tone="slate" size="sm">
+                              {row.course}
+                            </Badge>
+                          )}
                           {validationItem && isItemValid && (
                             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                               <CheckCircle2 className="h-3.5 w-3.5" /> Ready
@@ -512,22 +746,8 @@ export default function BlockBuilderModal({
                         </p>
                       </div>
 
-                      {/* Section Code Input */}
-                      <div className="md:col-span-2">
-                        <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">
-                          Section Code
-                        </label>
-                        <input
-                          type="text"
-                          value={row.sectionCode}
-                          onChange={(e) => updateRowField(idx, 'sectionCode', e.target.value.toUpperCase())}
-                          className={inputClass}
-                          required
-                        />
-                      </div>
-
                       {/* Assigned Faculty Picker */}
-                      <div className="md:col-span-4">
+                      <div className="flex-1 min-w-[240px] max-w-md">
                         <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">
                           Instructor ({row.assignedFaculty.length} assigned)
                         </label>
@@ -552,135 +772,76 @@ export default function BlockBuilderModal({
                         )}
                       </div>
 
-                      {/* Capacity */}
-                      <div className="md:col-span-2">
-                        <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">
-                          Capacity
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="50"
-                          value={row.capacity}
-                          onChange={(e) => updateRowField(idx, 'capacity', e.target.value)}
-                          className={inputClass}
-                        />
+                      {/* Remove Row Button */}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(idx)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                          title="Remove from block"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
 
                     {/* Schedule Slots (Lecture + Lab) */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                       {/* LECTURE SLOT */}
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-2.5 space-y-2">
+                      <div
+                        onClick={() =>
+                          setActiveSlot({
+                            subjectCode: row.subjectCode,
+                            slotType: 'LECTURE',
+                            rowIdx: idx,
+                          })
+                        }
+                        className={`rounded-lg border p-2.5 space-y-2 cursor-pointer transition-all ${
+                          activeSlot?.subjectCode === row.subjectCode && activeSlot?.slotType === 'LECTURE'
+                            ? 'border-accent ring-2 ring-accent/30 bg-accent/5 dark:bg-accent/10 shadow-xs'
+                            : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
                         <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-slate-200">
                           <span className="flex items-center gap-1.5">
                             <span className="h-2 w-2 rounded-full bg-blue-500" />
                             Lecture Slot
                           </span>
-                          <span className="text-[11px] text-slate-400">Classroom</span>
+                          <span className="text-[11px] text-slate-400">Lecture Room</span>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                          {/* Day */}
-                          <div>
-                            <span className="text-[10px] text-slate-500 block">Day</span>
-                            <select
-                              value={row.lecture.day}
-                              onChange={(e) => updateSlotField(idx, 'lecture', 'day', e.target.value)}
-                              className={inputClass}
-                            >
-                              {WEEKDAYS.map((d) => (
-                                <option key={d.key} value={d.key}>
-                                  {d.short}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Start */}
-                          <div>
-                            <span className="text-[10px] text-slate-500 block">Start</span>
-                            <select
-                              value={row.lecture.startTime}
-                              onChange={(e) => updateSlotField(idx, 'lecture', 'startTime', e.target.value)}
-                              className={inputClass}
-                            >
-                              {TIME_SLOTS.map((t) => (
-                                <option key={t} value={t}>
-                                  {formatTime(`${t}:00`)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* End */}
-                          <div>
-                            <span className="text-[10px] text-slate-500 block">End</span>
-                            <select
-                              value={row.lecture.endTime}
-                              onChange={(e) => updateSlotField(idx, 'lecture', 'endTime', e.target.value)}
-                              className={inputClass}
-                            >
-                              {END_TIME_SLOTS.map((t) => (
-                                <option key={t} value={t}>
-                                  {formatTime(`${t}:00`)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Room */}
-                          <div>
-                            <span className="text-[10px] text-slate-500 block">Room</span>
-                            <select
-                              value={row.lecture.roomId}
-                              onChange={(e) => updateSlotField(idx, 'lecture', 'roomId', e.target.value)}
-                              className={inputClass}
-                            >
-                              <option value="AUTO">✨ Auto (Best fit)</option>
-                              {lectureRooms.map((r) => (
-                                <option key={r.id} value={r.id}>
-                                  {r.roomName} ({r.capacity})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* LAB SLOT */}
-                      <div
-                        className={`rounded-lg border p-2.5 space-y-2 transition-all ${
-                          row.lab.enabled
-                            ? 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40'
-                            : 'border-dashed border-slate-200 dark:border-slate-800 opacity-60 bg-transparent'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-slate-200">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={row.lab.enabled}
-                              onChange={(e) => updateSlotField(idx, 'lab', 'enabled', e.target.checked)}
+                              checked={row.lecture.enabled}
+                              onChange={(e) =>
+                                updateSlotField(idx, 'lecture', 'enabled', e.target.checked)
+                              }
                               className="rounded border-slate-300 text-accent focus:ring-accent"
                             />
-                            <span className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full bg-purple-500" />
-                              Lab Slot (3 hours)
-                            </span>
+                            <span>Include Lecture</span>
                           </label>
-                          <span className="text-[11px] text-slate-400">Computer Lab</span>
                         </div>
 
-                        {row.lab.enabled ? (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                        {row.lecture.enabled && (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                             {/* Day */}
                             <div>
-                              <span className="text-[10px] text-slate-500 block">Day</span>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">Day</label>
                               <select
-                                value={row.lab.day}
-                                onChange={(e) => updateSlotField(idx, 'lab', 'day', e.target.value)}
-                                className={inputClass}
+                                value={row.lecture.day}
+                                onFocus={() =>
+                                  setActiveSlot({
+                                    subjectCode: row.subjectCode,
+                                    slotType: 'LECTURE',
+                                    rowIdx: idx,
+                                  })
+                                }
+                                onChange={(e) =>
+                                  updateSlotField(idx, 'lecture', 'day', e.target.value)
+                                }
+                                className={`${inputClass} !py-1 text-xs`}
                               >
                                 {WEEKDAYS.map((d) => (
                                   <option key={d.key} value={d.key}>
@@ -690,33 +851,194 @@ export default function BlockBuilderModal({
                               </select>
                             </div>
 
-                            {/* Start */}
+                            {/* Start Time */}
                             <div>
-                              <span className="text-[10px] text-slate-500 block">Start</span>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">Start</label>
                               <select
-                                value={row.lab.startTime}
-                                onChange={(e) => updateSlotField(idx, 'lab', 'startTime', e.target.value)}
-                                className={inputClass}
+                                value={row.lecture.startTime}
+                                onFocus={() =>
+                                  setActiveSlot({
+                                    subjectCode: row.subjectCode,
+                                    slotType: 'LECTURE',
+                                    rowIdx: idx,
+                                  })
+                                }
+                                onChange={(e) =>
+                                  updateSlotField(idx, 'lecture', 'startTime', e.target.value)
+                                }
+                                className={`${inputClass} !py-1 text-xs font-mono`}
                               >
                                 {TIME_SLOTS.map((t) => (
                                   <option key={t} value={t}>
-                                    {formatTime(`${t}:00`)}
+                                    {formatTime(t)}
                                   </option>
                                 ))}
                               </select>
                             </div>
 
-                            {/* End */}
+                            {/* End Time */}
                             <div>
-                              <span className="text-[10px] text-slate-500 block">End</span>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">End</label>
+                              <select
+                                value={row.lecture.endTime}
+                                onFocus={() =>
+                                  setActiveSlot({
+                                    subjectCode: row.subjectCode,
+                                    slotType: 'LECTURE',
+                                    rowIdx: idx,
+                                  })
+                                }
+                                onChange={(e) =>
+                                  updateSlotField(idx, 'lecture', 'endTime', e.target.value)
+                                }
+                                className={`${inputClass} !py-1 text-xs font-mono`}
+                              >
+                                {END_TIME_SLOTS.filter((t) => t > row.lecture.startTime).map(
+                                  (t) => (
+                                    <option key={t} value={t}>
+                                      {formatTime(t)}
+                                    </option>
+                                  )
+                                )}
+                              </select>
+                            </div>
+
+                            {/* Room */}
+                            <div>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">Room</label>
+                              <select
+                                value={row.lecture.roomId}
+                                onFocus={() =>
+                                  setActiveSlot({
+                                    subjectCode: row.subjectCode,
+                                    slotType: 'LECTURE',
+                                    rowIdx: idx,
+                                  })
+                                }
+                                onChange={(e) =>
+                                  updateSlotField(idx, 'lecture', 'roomId', e.target.value)
+                                }
+                                className={`${inputClass} !py-1 text-xs`}
+                              >
+                                <option value="AUTO">✨ Auto (Best fit)</option>
+                                {lectureRooms.map((r) => (
+                                  <option key={r.id} value={r.id}>
+                                    {r.roomName} (Cap {r.capacity})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* LAB SLOT */}
+                      <div
+                        onClick={() =>
+                          setActiveSlot({
+                            subjectCode: row.subjectCode,
+                            slotType: 'LAB',
+                            rowIdx: idx,
+                          })
+                        }
+                        className={`rounded-lg border p-2.5 space-y-2 cursor-pointer transition-all ${
+                          activeSlot?.subjectCode === row.subjectCode && activeSlot?.slotType === 'LAB'
+                            ? 'border-purple-500 ring-2 ring-purple-500/30 bg-purple-50/20 dark:bg-purple-950/20 shadow-xs'
+                            : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-slate-200">
+                          <span className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-purple-500" />
+                            Lab Slot
+                          </span>
+                          <span className="text-[11px] text-slate-400">Computer Lab</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={row.lab.enabled}
+                              onChange={(e) =>
+                                updateSlotField(idx, 'lab', 'enabled', e.target.checked)
+                              }
+                              className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                            />
+                            <span>Include Lab Slot</span>
+                          </label>
+                        </div>
+
+                        {row.lab.enabled && (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                            {/* Day */}
+                            <div>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">Day</label>
+                              <select
+                                value={row.lab.day}
+                                onFocus={() =>
+                                  setActiveSlot({
+                                    subjectCode: row.subjectCode,
+                                    slotType: 'LAB',
+                                    rowIdx: idx,
+                                  })
+                                }
+                                onChange={(e) => updateSlotField(idx, 'lab', 'day', e.target.value)}
+                                className={`${inputClass} !py-1 text-xs`}
+                              >
+                                {WEEKDAYS.map((d) => (
+                                  <option key={d.key} value={d.key}>
+                                    {d.short}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Start Time */}
+                            <div>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">Start</label>
+                              <select
+                                value={row.lab.startTime}
+                                onFocus={() =>
+                                  setActiveSlot({
+                                    subjectCode: row.subjectCode,
+                                    slotType: 'LAB',
+                                    rowIdx: idx,
+                                  })
+                                }
+                                onChange={(e) =>
+                                  updateSlotField(idx, 'lab', 'startTime', e.target.value)
+                                }
+                                className={`${inputClass} !py-1 text-xs font-mono`}
+                              >
+                                {TIME_SLOTS.map((t) => (
+                                  <option key={t} value={t}>
+                                    {formatTime(t)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* End Time */}
+                            <div>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">End</label>
                               <select
                                 value={row.lab.endTime}
-                                onChange={(e) => updateSlotField(idx, 'lab', 'endTime', e.target.value)}
-                                className={inputClass}
+                                onFocus={() =>
+                                  setActiveSlot({
+                                    subjectCode: row.subjectCode,
+                                    slotType: 'LAB',
+                                    rowIdx: idx,
+                                  })
+                                }
+                                onChange={(e) =>
+                                  updateSlotField(idx, 'lab', 'endTime', e.target.value)
+                                }
+                                className={`${inputClass} !py-1 text-xs font-mono`}
                               >
-                                {END_TIME_SLOTS.map((t) => (
+                                {END_TIME_SLOTS.filter((t) => t > row.lab.startTime).map((t) => (
                                   <option key={t} value={t}>
-                                    {formatTime(`${t}:00`)}
+                                    {formatTime(t)}
                                   </option>
                                 ))}
                               </select>
@@ -724,57 +1046,59 @@ export default function BlockBuilderModal({
 
                             {/* Room */}
                             <div>
-                              <span className="text-[10px] text-slate-500 block">Room</span>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">Room</label>
                               <select
                                 value={row.lab.roomId}
-                                onChange={(e) => updateSlotField(idx, 'lab', 'roomId', e.target.value)}
-                                className={inputClass}
+                                onFocus={() =>
+                                  setActiveSlot({
+                                    subjectCode: row.subjectCode,
+                                    slotType: 'LAB',
+                                    rowIdx: idx,
+                                  })
+                                }
+                                onChange={(e) =>
+                                  updateSlotField(idx, 'lab', 'roomId', e.target.value)
+                                }
+                                className={`${inputClass} !py-1 text-xs`}
                               >
                                 <option value="AUTO">✨ Auto (Best fit)</option>
                                 {labRooms.map((r) => (
                                   <option key={r.id} value={r.id}>
-                                    {r.roomName} ({r.capacity})
+                                    {r.roomName} (Cap {r.capacity})
                                   </option>
                                 ))}
                               </select>
                             </div>
                           </div>
-                        ) : (
-                          <div className="text-[11px] text-slate-400 italic py-1">
-                            No lab session required for this offering (Lecture only).
-                          </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Allocated Rooms Preview or Error Messages */}
+                    {/* Pre-allocated Preview or Conflict Notices */}
                     {validationItem && (
-                      <div className="pt-1">
-                        {!isItemValid && itemErrors.length > 0 ? (
-                          <div className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/50 p-2 text-[11px] text-red-700 dark:text-red-300 space-y-0.5">
-                            {itemErrors.map((err, i) => (
-                              <div key={i} className="flex items-center gap-1.5">
-                                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                        {itemErrors.length > 0 ? (
+                          <div className="space-y-1 text-red-600 dark:text-red-400 font-medium">
+                            {itemErrors.map((err, eIdx) => (
+                              <div key={eIdx} className="flex items-center gap-1.5">
+                                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                                 <span>{err}</span>
                               </div>
                             ))}
                           </div>
                         ) : (
-                          validationItem.allocatedSchedules && validationItem.allocatedSchedules.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-                              <span className="font-semibold text-slate-700 dark:text-slate-200">
-                                Allocated Rooms:
-                              </span>
-                              {validationItem.allocatedSchedules.map((s, si) => (
-                                <Badge key={si} variant="secondary" size="sm" className="gap-1">
-                                  <MapPin className="h-3 w-3 text-accent" />
-                                  <span>
-                                    {s.slotType || 'Slot'}: {s.roomName} ({s.day} {s.startTime?.substring(0, 5)}–{s.endTime?.substring(0, 5)})
-                                  </span>
-                                </Badge>
-                              ))}
-                            </div>
-                          )
+                          <div className="flex flex-wrap items-center gap-3 text-slate-600 dark:text-slate-400">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                              <Sparkles className="h-3.5 w-3.5 text-accent" />
+                              Allocated Rooms:
+                            </span>
+                            {(validationItem.allocatedSchedules || []).map((s, sIdx) => (
+                              <Badge key={sIdx} tone="slate" size="sm" className="font-mono">
+                                {s.slotType}: {s.roomName} ({s.day.substring(0, 3)}{' '}
+                                {formatTime(s.startTime)}–{formatTime(s.endTime)})
+                              </Badge>
+                            ))}
+                          </div>
                         )}
                       </div>
                     )}
@@ -783,49 +1107,54 @@ export default function BlockBuilderModal({
               })}
             </div>
           )}
+            </div>
+
+            {/* Right Column: Weekly Timetable */}
+            <div className="lg:col-span-6 xl:col-span-6 lg:sticky lg:top-0">
+              <BlockTimetable
+                rows={rows}
+                activeSlot={activeSlot}
+                onSelectSlot={handleSelectSlotByKey}
+                onUpdateSlotTime={handleUpdateSlotTime}
+                blockCapacity={blockCapacity}
+                blockCode={blockName}
+                blockYearLevel={selectedYear}
+                facultyList={facultyList}
+                allSchedules={schedules}
+                allSections={sections}
+                existingBlockSlots={existingBlockSlots}
+                rooms={rooms}
+                validationResult={validationResult}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Modal Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 shrink-0">
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            {rows.length > 0 && (
-              <span>
-                Total Sections to Create: <strong className="text-slate-900 dark:text-white">{rows.length}</strong> ·{' '}
-                Total Weekly Slots: <strong className="text-slate-900 dark:text-white">
-                  {rows.reduce((acc, r) => acc + (r.lecture.enabled ? 1 : 0) + (r.lab.enabled ? 1 : 0), 0)}
-                </strong>
-              </span>
-            )}
+            {rows.length} class(es) in Block <span className="font-bold text-slate-700 dark:text-slate-200">{blockName || 'TBD'}{selectedYear ? ` · Year ${selectedYear}` : ''}</span> ({blockCapacity} seats)
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              disabled={submitting}
-            >
+          <div className="flex items-center gap-2.5">
+            <Button variant="ghost" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
             <Button
-              type="button"
               variant="secondary"
               onClick={handleValidate}
               loading={validating}
-              disabled={rows.length === 0 || submitting}
-              className="gap-1.5"
+              disabled={submitting || rows.length === 0}
             >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Validate
+              Validate Block
             </Button>
             <Button
-              type="button"
               onClick={handleCreateAll}
               loading={submitting}
-              disabled={rows.length === 0 || validating}
+              disabled={rows.length === 0}
               className="gap-1.5"
             >
               <CheckCircle2 className="h-4 w-4" />
-              Create All Sections ({rows.length})
+              Create Block & All Classes
             </Button>
           </div>
         </div>
@@ -833,4 +1162,3 @@ export default function BlockBuilderModal({
     </div>
   )
 }
-

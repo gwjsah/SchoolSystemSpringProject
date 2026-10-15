@@ -81,9 +81,14 @@ public final class Responses {
             List<String> globalErrors) {}
 
     public record SectionDto(
-            String id, String sectionCode, String subjectCode, String subjectName, int units,
+            String id, String blockId, String sectionCode, String subjectCode, String subjectName, int units,
             String facultyId, String facultyName, List<ScheduleDto> schedules,
-            int capacity, int currentCount, int availableSlots, boolean full) {}
+            int capacity, int currentCount, int availableSlots, boolean full,
+            String blockCourseCode, Integer blockYearLevel) {}
+
+    public record SectionBlockDto(
+            String id, String sectionCode, String courseCode, int yearLevel, int capacity,
+            int classCount, List<SectionDto> classes) {}
 
     public record SubjectDto(
             String id, String subjectCode, String subjectName, int units, int yearLevel,

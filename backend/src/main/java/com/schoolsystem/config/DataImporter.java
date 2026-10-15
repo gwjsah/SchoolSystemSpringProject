@@ -87,6 +87,7 @@ public class DataImporter implements ApplicationRunner {
     private final ScheduleRepository scheduleRepository;
     private final SubjectRepository subjectRepository;
     private final SectionRepository sectionRepository;
+    private final com.schoolsystem.repository.SectionBlockRepository sectionBlockRepository;
     private final EnrollmentPeriodRepository enrollmentPeriodRepository;
     private final GradingPeriodRepository gradingPeriodRepository;
     private final EnrollmentRepository enrollmentRepository;
@@ -246,16 +247,31 @@ public class DataImporter implements ApplicationRunner {
 
     private Map<String, Section> importSections(JsonNode nodes, Map<String, Subject> subjects,
                                                 Map<String, Faculty> faculty, Map<String, Schedule> schedules) {
+        Map<String, com.schoolsystem.entity.SectionBlock> blockMap = new HashMap<>();
         Map<String, Section> map = new HashMap<>();
         for (JsonNode n : nodes) {
+            String sCode = req(n, "sectionCode");
+            Subject subject = find(subjects, req(n, "subjectCode"), "subject");
+            int cap = integer(n, "capacity");
+
+            String courseCode = subject.getCourse();
+            int yLevel = subject.getYearLevel();
+            String blockKey = courseCode.toUpperCase() + "::" + yLevel + "::" + sCode.toUpperCase();
+
+            com.schoolsystem.entity.SectionBlock block = blockMap.computeIfAbsent(blockKey, k -> {
+                return sectionBlockRepository.findByCourseCodeIgnoreCaseAndYearLevelAndSectionCodeIgnoreCase(courseCode, yLevel, sCode)
+                        .orElseGet(() -> sectionBlockRepository.save(new com.schoolsystem.entity.SectionBlock(sCode, courseCode, yLevel, cap)));
+            });
+
             Section section = new Section();
-            section.setSectionCode(req(n, "sectionCode"));
-            section.setSubject(find(subjects, req(n, "subjectCode"), "subject"));
+            section.setBlock(block);
+            section.setSubject(subject);
             section.setFaculty(find(faculty, req(n, "facultyId"), "faculty"));
             for (String scheduleId : strings(n.get("scheduleIds"))) {
-                section.getSchedules().add(find(schedules, scheduleId, "schedule"));
+                Schedule sched = find(schedules, scheduleId, "schedule");
+                sched.setSection(section);
+                section.getSchedules().add(sched);
             }
-            section.setCapacity(integer(n, "capacity"));
             section.setCurrentCount(integer(n, "currentCount")); // corrected after enrollments are loaded
             map.put(req(n, "id"), sectionRepository.save(section));
         }

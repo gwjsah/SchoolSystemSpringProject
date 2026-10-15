@@ -71,22 +71,18 @@ public class ScheduleService {
     public void deleteSchedule(String scheduleId) {
         Schedule schedule = getScheduleById(scheduleId);
 
-        List<Section> sections = sectionRepository.findBySchedules_Id(scheduleId);
-        if (!sections.isEmpty()) {
-            for (Section sec : sections) {
-                if (sec.getSchedules().size() <= 1) {
-                    throw new IllegalStateException(
-                            "Cannot delete schedule — it is the only meeting time for section: "
-                                    + sec.getSectionCode() + ". Delete the section instead.");
-                }
+        Section sec = schedule.getSection();
+        if (sec != null) {
+            if (sec.getSchedules().size() <= 1) {
+                throw new IllegalStateException(
+                        "Cannot delete schedule — it is the only meeting time for section: "
+                                + sec.getSectionCode() + ". Delete the section instead.");
             }
-            for (Section sec : sections) {
-                sec.getSchedules().removeIf(s -> s.getId().equals(scheduleId));
-                sectionRepository.save(sec);
-            }
+            sec.getSchedules().removeIf(s -> s.getId().equals(scheduleId));
+            sectionRepository.save(sec);
+        } else {
+            scheduleRepository.delete(schedule);
         }
-
-        scheduleRepository.delete(schedule);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

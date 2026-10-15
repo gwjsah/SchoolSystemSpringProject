@@ -40,6 +40,7 @@ public class DatabasePopulatorService {
     private final RoomRepository roomRepository;
     private final ScheduleRepository scheduleRepository;
     private final SectionRepository sectionRepository;
+    private final com.schoolsystem.repository.SectionBlockRepository sectionBlockRepository;
     private final PasswordEncoder passwordEncoder;
 
     public record SeedSubject(String code, String name, int units, int yearLevel, Semester semester, String course, List<String> prerequisites) {}
@@ -303,73 +304,110 @@ public class DatabasePopulatorService {
         if (labRooms.isEmpty()) labRooms = rooms;
         if (lecRooms.isEmpty()) lecRooms = rooms;
 
-        // Distinct academic time slots (1.5h meetings)
-        LocalTime[][] timePairs = new LocalTime[][]{
-                {LocalTime.of(7, 30), LocalTime.of(9, 0)},
-                {LocalTime.of(9, 0), LocalTime.of(10, 30)},
-                {LocalTime.of(10, 30), LocalTime.of(12, 0)},
-                {LocalTime.of(13, 0), LocalTime.of(14, 30)},
-                {LocalTime.of(14, 30), LocalTime.of(16, 0)},
-                {LocalTime.of(16, 0), LocalTime.of(17, 30)},
-                {LocalTime.of(17, 30), LocalTime.of(19, 0)}
-        };
-
-        Schedule.Day[][] dayPairs = new Schedule.Day[][]{
-                {Schedule.Day.MONDAY, Schedule.Day.WEDNESDAY},
-                {Schedule.Day.TUESDAY, Schedule.Day.THURSDAY},
-                {Schedule.Day.FRIDAY, Schedule.Day.SATURDAY}
-        };
+        // Distinct academic time slots across weekdays (NEVER SUNDAY)
+        record SlotTime(Schedule.Day[] days, LocalTime start, LocalTime end) {}
+        List<SlotTime> nonOverlappingSlots = List.of(
+                new SlotTime(new Schedule.Day[]{Schedule.Day.MONDAY, Schedule.Day.WEDNESDAY}, LocalTime.of(8, 0), LocalTime.of(9, 30)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.MONDAY, Schedule.Day.WEDNESDAY}, LocalTime.of(9, 30), LocalTime.of(11, 0)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.MONDAY, Schedule.Day.WEDNESDAY}, LocalTime.of(11, 0), LocalTime.of(12, 30)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.MONDAY, Schedule.Day.WEDNESDAY}, LocalTime.of(13, 0), LocalTime.of(14, 30)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.MONDAY, Schedule.Day.WEDNESDAY}, LocalTime.of(14, 30), LocalTime.of(16, 0)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.TUESDAY, Schedule.Day.THURSDAY}, LocalTime.of(8, 0), LocalTime.of(9, 30)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.TUESDAY, Schedule.Day.THURSDAY}, LocalTime.of(9, 30), LocalTime.of(11, 0)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.TUESDAY, Schedule.Day.THURSDAY}, LocalTime.of(11, 0), LocalTime.of(12, 30)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.TUESDAY, Schedule.Day.THURSDAY}, LocalTime.of(13, 0), LocalTime.of(14, 30)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.TUESDAY, Schedule.Day.THURSDAY}, LocalTime.of(14, 30), LocalTime.of(16, 0)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.FRIDAY, Schedule.Day.SATURDAY}, LocalTime.of(8, 0), LocalTime.of(9, 30)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.FRIDAY, Schedule.Day.SATURDAY}, LocalTime.of(9, 30), LocalTime.of(11, 0)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.FRIDAY, Schedule.Day.SATURDAY}, LocalTime.of(11, 0), LocalTime.of(12, 30)),
+                new SlotTime(new Schedule.Day[]{Schedule.Day.FRIDAY, Schedule.Day.SATURDAY}, LocalTime.of(13, 0), LocalTime.of(14, 30))
+        );
 
         int sectionsCreated = 0;
         int facultyIdx = 0;
         int roomLecIdx = 0;
         int roomLabIdx = 0;
-        int slotIdx = 0;
-        int dayIdx = 0;
 
-        // Populate sections for subjects that don't have sections yet
-        for (Subject subject : allSubjects) {
-            List<Section> existingSections = sectionRepository.findBySubject_SubjectCode(subject.getSubjectCode());
-            // Ensure each subject has at least 1 section, and year 1/2 subjects have 2 sections for morning & afternoon flexibility!
-            int neededSections = (subject.getYearLevel() <= 2) ? 2 : 1;
-            int toCreate = neededSections - existingSections.size();
+        // Standard course blocks: 2 groups per course and year level (CS-F1, CS-F2; IT-G1, IT-G2)
+        record BlockDef(String code, String course, int year) {}
+        List<BlockDef> blockDefs = List.of(
+                // BSCS Years 1–4
+                new BlockDef("CS-F1", "BSCS", 1),
+                new BlockDef("CS-F2", "BSCS", 1),
+                new BlockDef("CS-F1", "BSCS", 2),
+                new BlockDef("CS-F2", "BSCS", 2),
+                new BlockDef("CS-F1", "BSCS", 3),
+                new BlockDef("CS-F2", "BSCS", 3),
+                new BlockDef("CS-F1", "BSCS", 4),
+                new BlockDef("CS-F2", "BSCS", 4),
 
-            for (int sCount = 0; sCount < toCreate; sCount++) {
+                // BSIT Years 1–4
+                new BlockDef("IT-G1", "BSIT", 1),
+                new BlockDef("IT-G2", "BSIT", 1),
+                new BlockDef("IT-G1", "BSIT", 2),
+                new BlockDef("IT-G2", "BSIT", 2),
+                new BlockDef("IT-G1", "BSIT", 3),
+                new BlockDef("IT-G2", "BSIT", 3),
+                new BlockDef("IT-G1", "BSIT", 4),
+                new BlockDef("IT-G2", "BSIT", 4)
+        );
+
+        int blockIndex = 0;
+        for (BlockDef bDef : blockDefs) {
+            final String bCode = bDef.code();
+            final String cCode = bDef.course();
+            final int yLevel = bDef.year();
+
+            com.schoolsystem.entity.SectionBlock block = sectionBlockRepository
+                    .findByCourseCodeIgnoreCaseAndYearLevelAndSectionCodeIgnoreCase(cCode, yLevel, bCode)
+                    .orElseGet(() -> sectionBlockRepository.save(new com.schoolsystem.entity.SectionBlock(bCode, cCode, yLevel, 40)));
+
+            List<Subject> matchingSubjects = allSubjects.stream()
+                    .filter(s -> cCode.equalsIgnoreCase(s.getCourse()) && s.getYearLevel() == yLevel)
+                    .toList();
+
+            int slotIdx = (blockIndex % 2 == 1) ? 5 : 0;
+            blockIndex++;
+
+            for (Subject subject : matchingSubjects) {
+                if (sectionRepository.existsByBlock_IdAndSubject_SubjectCode(block.getId(), subject.getSubjectCode())) {
+                    continue;
+                }
+
                 boolean isLabCourse = subject.getSubjectCode().contains("CS") || subject.getSubjectCode().contains("IT");
                 Room room = isLabCourse
                         ? labRooms.get(roomLabIdx++ % labRooms.size())
                         : lecRooms.get(roomLecIdx++ % lecRooms.size());
 
-                Faculty faculty = facultyList.get(facultyIdx++ % facultyList.size());
-                Schedule.Day[] days = dayPairs[dayIdx++ % dayPairs.length];
-                LocalTime[] times = timePairs[slotIdx++ % timePairs.length];
+                Faculty faculty;
+                if (subject.getAssignedFaculties() != null && !subject.getAssignedFaculties().isEmpty()) {
+                    faculty = subject.getAssignedFaculties().get(facultyIdx++ % subject.getAssignedFaculties().size());
+                } else {
+                    faculty = facultyList.get(facultyIdx++ % facultyList.size());
+                }
 
-                // Generate section code based on course prefix
-                String prefix = "BSCS".equalsIgnoreCase(subject.getCourse()) ? "CS-F" : "IT-G";
-                long totalInCourse = sectionRepository.count();
-                String sectionCode = String.format("%s%d", prefix, totalInCourse + 1 + sectionsCreated);
+                SlotTime slot = nonOverlappingSlots.get(slotIdx++ % nonOverlappingSlots.size());
 
-                // Create the schedule objects for the meeting days
+                Section section = new Section();
+                section.setBlock(block);
+                section.setSubject(subject);
+                section.setFaculty(faculty);
+                section.setCurrentCount(0);
+
                 List<Schedule> schedules = new ArrayList<>();
-                for (Schedule.Day day : days) {
+                for (Schedule.Day day : slot.days()) {
                     Schedule schedule = new Schedule();
                     schedule.setDay(day);
-                    schedule.setStartTime(times[0]);
-                    schedule.setEndTime(times[1]);
+                    schedule.setStartTime(slot.start());
+                    schedule.setEndTime(slot.end());
                     schedule.setRoom(room);
+                    schedule.setSlotType(room.getRoomType());
+                    schedule.setSection(section);
                     scheduleRepository.save(schedule);
                     schedules.add(schedule);
                 }
 
-                // Create section
-                Section section = new Section();
-                section.setSectionCode(sectionCode);
-                section.setSubject(subject);
-                section.setFaculty(faculty);
-                section.setCapacity(35);
-                section.setCurrentCount(0);
-                section.setSchedules(schedules);
-
+                section.getSchedules().addAll(schedules);
                 sectionRepository.save(section);
                 sectionsCreated++;
             }

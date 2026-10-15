@@ -1,8 +1,10 @@
 package com.schoolsystem.controller;
 
 import com.schoolsystem.dto.DtoMapper;
+import com.schoolsystem.dto.Requests.BulkSectionRequest;
 import com.schoolsystem.dto.Requests.ScheduleRequest;
 import com.schoolsystem.dto.Requests.SectionRequest;
+import com.schoolsystem.dto.Responses.BulkValidationResponse;
 import com.schoolsystem.dto.Responses.SectionDto;
 import com.schoolsystem.entity.Section;
 import com.schoolsystem.security.AuthUser;
@@ -13,16 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -59,27 +52,28 @@ public class SectionController {
     @ResponseStatus(HttpStatus.CREATED)
     public SectionDto create(@Valid @RequestBody SectionRequest r) {
         return DtoMapper.section(sectionService.createSection(
-                r.sectionCode(), r.subjectCode(), r.facultyId(), r.capacity(), toSlots(r.schedules())));
+                r.sectionCode(), r.blockId(), r.courseCode(), r.yearLevel(),
+                r.subjectCode(), r.facultyId(), r.capacity(), toSlots(r.schedules())));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public SectionDto update(@PathVariable String id, @Valid @RequestBody SectionRequest r) {
         return DtoMapper.section(sectionService.updateSection(
-                id, r.sectionCode(), r.facultyId(), r.capacity(), toSlots(r.schedules())));
+                id, r.sectionCode(), r.facultyId(), r.capacity() != null ? r.capacity() : 0, toSlots(r.schedules())));
     }
 
     @PostMapping("/bulk/validate")
     @PreAuthorize("hasRole('ADMIN')")
-    public com.schoolsystem.dto.Responses.BulkValidationResponse validateBulk(@Valid @RequestBody com.schoolsystem.dto.Requests.BulkSectionRequest r) {
-        return sectionService.validateBulkSections(r.sections());
+    public BulkValidationResponse validateBulk(@Valid @RequestBody BulkSectionRequest r) {
+        return sectionService.validateBulkSections(r);
     }
 
     @PostMapping("/bulk")
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
-    public List<SectionDto> createBulk(@Valid @RequestBody com.schoolsystem.dto.Requests.BulkSectionRequest r) {
-        return sectionService.createBulkSections(r.sections()).stream()
+    public List<SectionDto> createBulk(@Valid @RequestBody BulkSectionRequest r) {
+        return sectionService.createBulkSections(r).stream()
                 .map(DtoMapper::section).toList();
     }
 

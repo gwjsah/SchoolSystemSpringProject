@@ -1,41 +1,21 @@
 package com.schoolsystem.service;
 
 import com.schoolsystem.dto.DtoMapper;
+import com.schoolsystem.dto.Requests.BulkSectionRequest;
 import com.schoolsystem.dto.Requests.SectionRequest;
 import com.schoolsystem.dto.Responses.BulkValidationItem;
 import com.schoolsystem.dto.Responses.BulkValidationResponse;
 import com.schoolsystem.dto.Responses.ScheduleDto;
-import com.schoolsystem.exception.NotFoundException;
-
-import com.schoolsystem.entity.Course;
-import com.schoolsystem.entity.Faculty;
-import com.schoolsystem.entity.Room;
-import com.schoolsystem.entity.Schedule;
-import com.schoolsystem.entity.Section;
-import com.schoolsystem.entity.Subject;
+import com.schoolsystem.entity.*;
 import com.schoolsystem.entity.enums.RoomType;
-import com.schoolsystem.repository.CartItemRepository;
-import com.schoolsystem.repository.CourseRepository;
-import com.schoolsystem.repository.EnrollmentRepository;
-import com.schoolsystem.repository.FacultyRepository;
-import com.schoolsystem.repository.FacultyEvaluationRepository;
-import com.schoolsystem.repository.GradeRepository;
-import com.schoolsystem.repository.RoomRepository;
-import com.schoolsystem.repository.ScheduleRepository;
-import com.schoolsystem.repository.SectionRepository;
-import com.schoolsystem.repository.SubjectRepository;
+import com.schoolsystem.exception.NotFoundException;
+import com.schoolsystem.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,6 +23,7 @@ import java.util.stream.Collectors;
 public class SectionService {
 
     private final SectionRepository sectionRepository;
+    private final SectionBlockRepository sectionBlockRepository;
     private final ScheduleRepository scheduleRepository;
     private final SubjectRepository subjectRepository;
     private final FacultyRepository facultyRepository;
@@ -71,22 +52,32 @@ public class SectionService {
     @Transactional
     public Section createSection(String subjectCode, String facultyId,
                                  int capacity, List<ScheduleSlot> slots) {
-        return createSection(null, subjectCode, facultyId, capacity, slots);
+        return createSection(null, null, null, null, subjectCode, facultyId, capacity, slots);
     }
 
-    /**
-     * Creates the schedules and the section in one transaction. Checks room conflicts and
-     * faculty conflicts before saving anything. Auto-allocates room if roomId is empty/null/AUTO.
-     */
     @Transactional
     public Section createSection(String sectionCode, String subjectCode, String facultyId,
                                  int capacity, List<ScheduleSlot> slots) {
+        return createSection(sectionCode, null, null, null, subjectCode, facultyId, capacity, slots);
+    }
+
+    /**
+     * Creates the schedules and the section in one transaction.
+     * Links to or creates the SectionBlock.
+     * Enforces:
+     * - Faculty qualification
+     * - Room capacity vs block capacity
+     * - Room clash against all existing schedules
+     * - Faculty clash against all schedules taught by faculty
+     * - Block clash: no two classes in the same block can overlap in time
+     */
+    @Transactional
+    public Section createSection(String sectionCode, String blockId, String courseCode, Integer yearLevel,
+                                 String subjectCode, String facultyId, Integer capacity, List<ScheduleSlot> slots) {
         if (subjectCode == null || subjectCode.isBlank())
             throw new IllegalArgumentException("Subject cannot be empty");
         if (facultyId == null || facultyId.isBlank())
             throw new IllegalArgumentException("Faculty cannot be empty");
-        if (capacity <= 0)
-            throw new IllegalArgumentException("Capacity must be greater than 0");
         if (slots == null || slots.isEmpty())
             throw new IllegalArgumentException("At least one schedule slot is required");
 
@@ -100,25 +91,60 @@ public class SectionService {
             throw new IllegalStateException("Faculty " + faculty.getName() + " is not assigned to teach subject " + subjectCode + ". Please assign them on the Academic Subjects page first.");
         }
 
-        String finalSectionCode;
-        if (sectionCode != null && !sectionCode.trim().isEmpty()) {
-            finalSectionCode = sectionCode.trim().toUpperCase();
-            if (sectionRepository.existsBySectionCodeAndSubject_SubjectCode(finalSectionCode, subject.getSubjectCode())) {
-                throw new IllegalStateException("Section code '" + finalSectionCode + "' already exists for subject " + subject.getSubjectCode());
+        // Resolve SectionBlock
+        SectionBlock block;
+        if (blockId != null && !blockId.isBlank()) {
+            block = sectionBlockRepository.findById(blockId)
+                    .orElseThrow(() -> new NotFoundException("Section block not found: " + blockId));
+        } else if (sectionCode != null && !sectionCode.trim().isEmpty()) {
+            String trimmedCode = sectionCode.trim().toUpperCase();
+            String cCode = (courseCode != null && !courseCode.isBlank()) ? courseCode.trim().toUpperCase() : subject.getCourse();
+            int yLevel = (yearLevel != null && yearLevel > 0) ? yearLevel : subject.getYearLevel();
+            int cap = (capacity != null && capacity > 0) ? capacity : 35;
+
+            Optional<SectionBlock> existingBlock = sectionBlockRepository
+                    .findByCourseCodeIgnoreCaseAndYearLevelAndSectionCodeIgnoreCase(cCode, yLevel, trimmedCode);
+            if (existingBlock.isPresent()) {
+                block = existingBlock.get();
+                if (capacity != null && capacity > 0 && block.getCapacity() != capacity) {
+                    throw new IllegalStateException("Section block '" + trimmedCode + "' already exists for "
+                            + cCode + " Year " + yLevel + " with capacity " + block.getCapacity()
+                            + " (cannot create with capacity " + capacity + ")");
+                }
+            } else {
+                block = new SectionBlock(trimmedCode, cCode, yLevel, cap);
+                block = sectionBlockRepository.save(block);
             }
         } else {
-            finalSectionCode = generateSectionCode(subject.getCourse());
+            String cCode = subject.getCourse();
+            int yLevel = subject.getYearLevel();
+            String genCode = generateSectionCode(cCode, yLevel);
+            int cap = (capacity != null && capacity > 0) ? capacity : 35;
+            block = new SectionBlock(genCode, cCode, yLevel, cap);
+            block = sectionBlockRepository.save(block);
         }
 
-        List<Schedule> candidates = buildCandidates(slots, capacity, null, null);
-        checkConflicts(candidates, facultyId, null, null);
+        // Validate subject uniqueness within this specific block
+        if (sectionRepository.existsByBlock_IdAndSubject_SubjectCode(block.getId(), subject.getSubjectCode())) {
+            throw new IllegalStateException("Section block '" + block.getSectionCode() + "' (Year " + block.getYearLevel()
+                    + ") already contains a class for subject " + subject.getSubjectCode());
+        }
+
+        int effectiveCapacity = block.getCapacity();
+        List<Schedule> candidates = buildCandidates(slots, effectiveCapacity, null, null);
+
+        // Conflict checking: Room clash, Faculty clash, and Block-internal clash
+        checkConflicts(candidates, facultyId, block, null, null);
 
         Section section = new Section();
-        section.setSectionCode(finalSectionCode);
+        section.setBlock(block);
         section.setSubject(subject);
         section.setFaculty(faculty);
-        section.setCapacity(capacity);
         section.setCurrentCount(0);
+
+        for (Schedule s : candidates) {
+            s.setSection(section);
+        }
 
         scheduleRepository.saveAll(candidates);
         section.getSchedules().addAll(candidates);
@@ -139,8 +165,6 @@ public class SectionService {
                                  int capacity, List<ScheduleSlot> slots) {
         if (facultyId == null || facultyId.isBlank())
             throw new IllegalArgumentException("Faculty cannot be empty");
-        if (capacity <= 0)
-            throw new IllegalArgumentException("Capacity must be greater than 0");
         if (slots == null || slots.isEmpty())
             throw new IllegalArgumentException("At least one schedule slot is required");
 
@@ -148,29 +172,53 @@ public class SectionService {
         Faculty faculty = facultyRepository.findById(facultyId)
                 .orElseThrow(() -> new NotFoundException("Faculty not found"));
 
-        // Validate that faculty is assigned to teach this subject
         Subject subject = section.getSubject();
         if (subject != null && (subject.getAssignedFaculties() == null || subject.getAssignedFaculties().stream().noneMatch(f -> f.getId().equals(facultyId)))) {
             throw new IllegalStateException("Faculty " + faculty.getName() + " is not assigned to teach subject " + subject.getSubjectCode() + ". Please assign them on the Academic Subjects page first.");
         }
 
-        if (sectionCode != null && !sectionCode.trim().isEmpty()) {
-            String trimmed = sectionCode.trim().toUpperCase();
-            sectionRepository.findBySectionCodeAndSubject_SubjectCodeAndIdNot(trimmed, subject.getSubjectCode(), sectionId)
-                    .ifPresent(existing -> {
-                        throw new IllegalStateException("Section code '" + trimmed + "' already exists for subject " + subject.getSubjectCode());
-                    });
-            section.setSectionCode(trimmed);
+        SectionBlock block = section.getBlock();
+
+        // If block capacity is updated and capacity was passed
+        if (capacity > 0 && capacity != block.getCapacity()) {
+            if (section.getCurrentCount() > capacity) {
+                throw new IllegalStateException("Cannot reduce capacity to " + capacity + ": section already has " + section.getCurrentCount() + " enrolled students");
+            }
+            block.setCapacity(capacity);
+            sectionBlockRepository.save(block);
         }
 
-        List<Schedule> candidates = buildCandidates(slots, capacity, section, null);
-        checkConflicts(candidates, facultyId, section, null);
+        if (sectionCode != null && !sectionCode.trim().isEmpty()) {
+            String trimmed = sectionCode.trim().toUpperCase();
+            if (!block.getSectionCode().equalsIgnoreCase(trimmed)) {
+                // If the target block exists, move this section under it if subject isn't already in it
+                Optional<SectionBlock> targetBlock = sectionBlockRepository.findBySectionCodeIgnoreCase(trimmed);
+                if (targetBlock.isPresent()) {
+                    SectionBlock tb = targetBlock.get();
+                    if (sectionRepository.existsByBlock_SectionCodeIgnoreCaseAndSubject_SubjectCode(trimmed, subject.getSubjectCode())) {
+                        throw new IllegalStateException("Target block '" + trimmed + "' already contains subject " + subject.getSubjectCode());
+                    }
+                    block = tb;
+                    section.setBlock(block);
+                } else {
+                    // Update current block's code if only this class is in it or update name
+                    block.setSectionCode(trimmed);
+                    sectionBlockRepository.save(block);
+                }
+            }
+        }
+
+        List<Schedule> candidates = buildCandidates(slots, block.getCapacity(), section, null);
+        checkConflicts(candidates, facultyId, block, section, null);
 
         List<Schedule> oldSchedules = new ArrayList<>(section.getSchedules());
 
+        for (Schedule s : candidates) {
+            s.setSection(section);
+        }
+
         scheduleRepository.saveAll(candidates);
         section.setFaculty(faculty);
-        section.setCapacity(capacity);
         section.getSchedules().clear();
         section.getSchedules().addAll(candidates);
         sectionRepository.save(section);
@@ -181,7 +229,7 @@ public class SectionService {
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
-    /** Deletes a section and its schedules. Blocked while students are enrolled unless force is true. */
+    /** Deletes a section and its schedules. Auto-deletes empty block if this was the last class. */
     @Transactional
     public void deleteSection(String sectionId) {
         deleteSection(sectionId, false);
@@ -190,6 +238,7 @@ public class SectionService {
     @Transactional
     public void deleteSection(String sectionId, boolean force) {
         Section section = findSection(sectionId);
+        SectionBlock block = section.getBlock();
 
         if (!force) {
             if (section.getCurrentCount() > 0)
@@ -213,6 +262,11 @@ public class SectionService {
         section.getSchedules().clear();
         sectionRepository.delete(section);
         scheduleRepository.deleteAll(schedules);
+
+        // Auto-delete empty block when last class is deleted (Option A)
+        if (block != null && sectionRepository.countByBlock_Id(block.getId()) == 0) {
+            sectionBlockRepository.delete(block);
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -268,7 +322,7 @@ public class SectionService {
             candidates.add(schedule);
         }
 
-        // Check for self-overlap within the candidate slots
+        // Check for self-overlap within the candidate slots of the same section
         for (int i = 0; i < candidates.size(); i++) {
             for (int j = i + 1; j < candidates.size(); j++) {
                 Schedule s1 = candidates.get(i);
@@ -321,8 +375,13 @@ public class SectionService {
                                 + " for " + day + " " + startTime + "–" + endTime));
     }
 
-    /** Room clashes against every other schedule; faculty clashes against the faculty's other sections. */
-    private void checkConflicts(List<Schedule> candidates, String facultyId, Section excluded, List<Schedule> additionalBatchSchedules) {
+    /**
+     * Checks conflicts:
+     * 1. Room clash: no other schedule in the DB or current batch may book the same room at the same time.
+     * 2. Faculty clash: faculty cannot teach another class at the same time.
+     * 3. Block clash: classes within the SAME block cannot overlap in time on the same day (students take all classes!).
+     */
+    private void checkConflicts(List<Schedule> candidates, String facultyId, SectionBlock block, Section excluded, List<Schedule> additionalBatchSchedules) {
         Set<String> ownIds = excluded == null
                 ? Set.of()
                 : excluded.getSchedules().stream().map(Schedule::getId).collect(Collectors.toSet());
@@ -337,9 +396,20 @@ public class SectionService {
         List<Schedule> facultySchedules = sectionRepository.findByFaculty_Id(facultyId).stream()
                 .filter(s -> excluded == null || !s.getId().equals(excluded.getId()))
                 .flatMap(s -> s.getSchedules().stream())
+                .filter(s -> !ownIds.contains(s.getId()))
                 .toList();
 
+        // Schedules that belong to the same block
+        List<Schedule> blockSchedules = (block != null && block.getId() != null)
+                ? sectionRepository.findByBlock_Id(block.getId()).stream()
+                    .filter(s -> excluded == null || !s.getId().equals(excluded.getId()))
+                    .flatMap(s -> s.getSchedules().stream())
+                    .filter(s -> !ownIds.contains(s.getId()))
+                    .toList()
+                : List.of();
+
         for (Schedule candidate : candidates) {
+            // 1. Room clash
             for (Schedule existing : others) {
                 if (candidate.hasConflict(existing))
                     throw new IllegalStateException(
@@ -347,6 +417,8 @@ public class SectionService {
                                     + candidate.getStartTime() + "–" + candidate.getEndTime()
                                     + " in room " + candidate.getRoom().getRoomName() + ": room already booked");
             }
+
+            // 2. Faculty clash
             for (Schedule existing : facultySchedules) {
                 if (candidate.overlapsWith(existing))
                     throw new IllegalStateException(
@@ -354,21 +426,40 @@ public class SectionService {
                                     + candidate.getStartTime() + "–" + candidate.getEndTime()
                                     + ": faculty already assigned to another section");
             }
+
+            // 3. Block clash (classes within the same block cannot overlap in time)
+            for (Schedule existing : blockSchedules) {
+                if (candidate.overlapsWith(existing)) {
+                    String existingSubj = (existing.getSection() != null && existing.getSection().getSubject() != null)
+                            ? existing.getSection().getSubject().getSubjectCode() : "another class";
+                    throw new IllegalStateException(
+                            "Block schedule clash on " + candidate.getDay() + " "
+                                    + candidate.getStartTime() + "–" + candidate.getEndTime()
+                                    + ": clashes with " + existingSubj + " in the same block ("
+                                    + (block != null ? block.getSectionCode() : "") + ")");
+                }
+            }
         }
     }
 
     // ── Bulk Section Operations ───────────────────────────────────────────────
 
-    public BulkValidationResponse validateBulkSections(List<SectionRequest> requests) {
-        if (requests == null || requests.isEmpty()) {
+    public BulkValidationResponse validateBulkSections(BulkSectionRequest bulkReq) {
+        if (bulkReq == null || bulkReq.sections() == null || bulkReq.sections().isEmpty()) {
             return new BulkValidationResponse(false, List.of(), List.of("No sections provided for validation"));
         }
 
+        List<SectionRequest> requests = bulkReq.sections();
         List<BulkValidationItem> items = new ArrayList<>();
         List<String> globalErrors = new ArrayList<>();
         List<Schedule> batchAllocatedSchedules = new ArrayList<>();
         Map<String, List<Schedule>> batchFacultySchedules = new HashMap<>();
         Set<String> seenSubjectAndCode = new HashSet<>();
+
+        String blockCode = (bulkReq.blockCode() != null && !bulkReq.blockCode().isBlank())
+                ? bulkReq.blockCode().trim().toUpperCase() : null;
+        int blockCapacity = (bulkReq.capacity() != null && bulkReq.capacity() > 0)
+                ? bulkReq.capacity() : 35;
 
         for (int i = 0; i < requests.size(); i++) {
             SectionRequest req = requests.get(i);
@@ -381,7 +472,9 @@ public class SectionService {
             if (req.facultyId() == null || req.facultyId().isBlank()) {
                 errors.add("Faculty is required");
             }
-            if (req.capacity() <= 0) {
+
+            int rowCap = (req.capacity() != null && req.capacity() > 0) ? req.capacity() : blockCapacity;
+            if (rowCap <= 0) {
                 errors.add("Capacity must be greater than 0");
             }
             if (req.schedules() == null || req.schedules().isEmpty()) {
@@ -411,9 +504,18 @@ public class SectionService {
                 }
             }
 
-            String sectionCode = req.sectionCode() != null && !req.sectionCode().isBlank()
-                    ? req.sectionCode().trim().toUpperCase()
-                    : (subject != null ? generateSectionCode(subject.getCourse()) : "TBD");
+            String effectiveCourse = bulkReq.courseCode() != null && !bulkReq.courseCode().isBlank()
+                    ? bulkReq.courseCode().trim().toUpperCase()
+                    : (subject != null ? subject.getCourse() : "BSCS");
+            int effectiveYear = bulkReq.yearLevel() != null && bulkReq.yearLevel() > 0
+                    ? bulkReq.yearLevel()
+                    : (subject != null ? subject.getYearLevel() : 1);
+
+            String sectionCode = blockCode != null
+                    ? blockCode
+                    : (req.sectionCode() != null && !req.sectionCode().isBlank()
+                        ? req.sectionCode().trim().toUpperCase()
+                        : (subject != null ? generateSectionCode(subject.getCourse(), subject.getYearLevel()) : "TBD"));
 
             if (subject != null) {
                 String pairKey = subject.getSubjectCode() + "::" + sectionCode;
@@ -423,8 +525,16 @@ public class SectionService {
                     seenSubjectAndCode.add(pairKey);
                 }
 
-                if (sectionRepository.existsBySectionCodeAndSubject_SubjectCode(sectionCode, subject.getSubjectCode())) {
-                    errors.add("Section code '" + sectionCode + "' already exists in database for subject " + subject.getSubjectCode());
+                Optional<SectionBlock> existingBlock = sectionBlockRepository
+                        .findByCourseCodeIgnoreCaseAndYearLevelAndSectionCodeIgnoreCase(effectiveCourse, effectiveYear, sectionCode);
+                if (existingBlock.isPresent()) {
+                    if (sectionRepository.existsByBlock_IdAndSubject_SubjectCode(existingBlock.get().getId(), subject.getSubjectCode())) {
+                        errors.add("Section block '" + sectionCode + "' (Year " + effectiveYear + ") already has a class for subject " + subject.getSubjectCode());
+                    }
+                    if (bulkReq.capacity() != null && bulkReq.capacity() > 0 && existingBlock.get().getCapacity() != bulkReq.capacity()) {
+                        errors.add("Section block '" + sectionCode + "' already exists with capacity "
+                                + existingBlock.get().getCapacity() + " (cannot create with capacity " + bulkReq.capacity() + ")");
+                    }
                 }
             }
 
@@ -436,10 +546,22 @@ public class SectionService {
 
             if (errors.isEmpty() && faculty != null) {
                 try {
-                    List<Schedule> candidates = buildCandidates(slots, req.capacity(), null, batchAllocatedSchedules);
+                    List<Schedule> candidates = buildCandidates(slots, rowCap, null, batchAllocatedSchedules);
 
+                    // Block clash validation across batch items
+                    for (Schedule c : candidates) {
+                        for (Schedule bAlloc : batchAllocatedSchedules) {
+                            if (c.overlapsWith(bAlloc)) {
+                                throw new IllegalStateException("Block schedule clash on " + c.getDay() + " "
+                                        + c.getStartTime() + "–" + c.getEndTime()
+                                        + ": overlaps with another subject class in this block");
+                            }
+                        }
+                    }
+
+                    // Faculty clash validation
                     List<Schedule> facultyBatch = batchFacultySchedules.getOrDefault(faculty.getId(), List.of());
-                    checkConflicts(candidates, faculty.getId(), null, batchAllocatedSchedules);
+                    checkConflicts(candidates, faculty.getId(), null, null, batchAllocatedSchedules);
                     for (Schedule c : candidates) {
                         for (Schedule fb : facultyBatch) {
                             if (c.overlapsWith(fb)) {
@@ -472,12 +594,12 @@ public class SectionService {
     }
 
     @Transactional
-    public List<Section> createBulkSections(List<SectionRequest> requests) {
-        if (requests == null || requests.isEmpty()) {
+    public List<Section> createBulkSections(BulkSectionRequest bulkReq) {
+        if (bulkReq == null || bulkReq.sections() == null || bulkReq.sections().isEmpty()) {
             throw new IllegalArgumentException("No sections provided");
         }
 
-        BulkValidationResponse validation = validateBulkSections(requests);
+        BulkValidationResponse validation = validateBulkSections(bulkReq);
         if (!validation.valid()) {
             String allErrors = validation.items().stream()
                     .filter(it -> !it.valid())
@@ -486,8 +608,43 @@ public class SectionService {
             throw new IllegalStateException("Validation failed: " + allErrors);
         }
 
+        List<SectionRequest> requests = bulkReq.sections();
         List<Section> createdSections = new ArrayList<>();
         List<Schedule> batchAllocatedSchedules = new ArrayList<>();
+
+        String blockCode = (bulkReq.blockCode() != null && !bulkReq.blockCode().isBlank())
+                ? bulkReq.blockCode().trim().toUpperCase()
+                : (requests.get(0).sectionCode() != null && !requests.get(0).sectionCode().isBlank()
+                    ? requests.get(0).sectionCode().trim().toUpperCase()
+                    : generateSectionCode("BSCS"));
+
+        String courseCode = (bulkReq.courseCode() != null && !bulkReq.courseCode().isBlank())
+                ? bulkReq.courseCode().trim().toUpperCase()
+                : (requests.get(0).courseCode() != null ? requests.get(0).courseCode().trim().toUpperCase() : "BSCS");
+
+        int yearLevel = (bulkReq.yearLevel() != null && bulkReq.yearLevel() > 0)
+                ? bulkReq.yearLevel()
+                : (requests.get(0).yearLevel() != null ? requests.get(0).yearLevel() : 1);
+
+        int capacity = (bulkReq.capacity() != null && bulkReq.capacity() > 0)
+                ? bulkReq.capacity()
+                : (requests.get(0).capacity() != null && requests.get(0).capacity() > 0 ? requests.get(0).capacity() : 35);
+
+        Optional<SectionBlock> existingBlockOpt = sectionBlockRepository
+                .findByCourseCodeIgnoreCaseAndYearLevelAndSectionCodeIgnoreCase(courseCode, yearLevel, blockCode);
+
+        SectionBlock block;
+        if (existingBlockOpt.isPresent()) {
+            block = existingBlockOpt.get();
+            if (bulkReq.capacity() != null && bulkReq.capacity() > 0 && block.getCapacity() != capacity) {
+                throw new IllegalStateException("Section block '" + blockCode + "' already exists for "
+                        + courseCode + " Year " + yearLevel + " with capacity " + block.getCapacity()
+                        + " (cannot create with capacity " + capacity + ")");
+            }
+        } else {
+            SectionBlock newBlock = new SectionBlock(blockCode, courseCode, yearLevel, capacity);
+            block = sectionBlockRepository.save(newBlock);
+        }
 
         for (SectionRequest req : requests) {
             Subject subject = subjectRepository.findBySubjectCode(req.subjectCode())
@@ -495,23 +652,22 @@ public class SectionService {
             Faculty faculty = facultyRepository.findById(req.facultyId())
                     .orElseThrow(() -> new NotFoundException("Faculty not found"));
 
-            String sectionCode = req.sectionCode() != null && !req.sectionCode().isBlank()
-                    ? req.sectionCode().trim().toUpperCase()
-                    : generateSectionCode(subject.getCourse());
-
             List<ScheduleSlot> slots = req.schedules().stream()
                     .map(s -> new ScheduleSlot(s.day(), s.startTime(), s.endTime(), s.roomId(), s.slotType()))
                     .toList();
 
-            List<Schedule> candidates = buildCandidates(slots, req.capacity(), null, batchAllocatedSchedules);
-            checkConflicts(candidates, faculty.getId(), null, batchAllocatedSchedules);
+            List<Schedule> candidates = buildCandidates(slots, block.getCapacity(), null, batchAllocatedSchedules);
+            checkConflicts(candidates, faculty.getId(), block, null, batchAllocatedSchedules);
 
             Section section = new Section();
-            section.setSectionCode(sectionCode);
+            section.setBlock(block);
             section.setSubject(subject);
             section.setFaculty(faculty);
-            section.setCapacity(req.capacity());
             section.setCurrentCount(0);
+
+            for (Schedule s : candidates) {
+                s.setSection(section);
+            }
 
             scheduleRepository.saveAll(candidates);
             section.getSchedules().addAll(candidates);
@@ -525,16 +681,20 @@ public class SectionService {
     }
 
     /**
-     * Prefix comes from the subject's course (Subject.course holds a Course.code).
-     * Uses the highest existing number + 1. The old count + 1 could repeat a code after a deletion.
+     * Prefix comes from the course sectionPrefix (e.g. "CS-F", "IT-G").
+     * Uses highest existing number + 1 across SectionBlocks.
      */
-    private String generateSectionCode(String courseCode) {
+    public String generateSectionCode(String courseCode) {
+        return generateSectionCode(courseCode, 1);
+    }
+
+    public String generateSectionCode(String courseCode, int yearLevel) {
         Course course = courseRepository.findByCode(courseCode).orElse(null);
         String prefix = course != null ? course.getSectionPrefix() : courseCode + "-";
 
         int max = 0;
-        for (Section s : sectionRepository.findBySectionCodeStartingWith(prefix)) {
-            String suffix = s.getSectionCode().substring(prefix.length());
+        for (SectionBlock b : sectionBlockRepository.findByCourseCodeIgnoreCaseAndYearLevelAndSectionCodeStartingWithIgnoreCase(courseCode, yearLevel, prefix)) {
+            String suffix = b.getSectionCode().substring(prefix.length());
             if (suffix.matches("\\d+")) {
                 max = Math.max(max, Integer.parseInt(suffix));
             }

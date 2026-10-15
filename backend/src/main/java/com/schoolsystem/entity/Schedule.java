@@ -29,6 +29,10 @@ public class Schedule {
     @Column(name = "slot_type")
     private com.schoolsystem.entity.enums.RoomType slotType;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "section_id")
+    private Section section;
+
     @NotNull(message = "Day is required")
     @Enumerated(EnumType.STRING)
     @Column(name = "day_of_week", nullable = false)

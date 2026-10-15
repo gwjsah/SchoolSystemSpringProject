@@ -18,6 +18,7 @@ import com.schoolsystem.dto.Responses.RoomDto;
 import com.schoolsystem.dto.Responses.RosterEntryDto;
 import com.schoolsystem.dto.Responses.ScheduleDto;
 import com.schoolsystem.dto.Responses.SectionDto;
+import com.schoolsystem.dto.Responses.SectionBlockDto;
 import com.schoolsystem.dto.Responses.SubjectDto;
 import com.schoolsystem.dto.Responses.TermCalendarDto;
 import com.schoolsystem.entity.Account;
@@ -127,11 +128,30 @@ public final class DtoMapper {
 
     public static SectionDto section(Section s) {
         Faculty f = s.getFaculty();
-        return new SectionDto(s.getId(), s.getSectionCode(),
+        String blockId = s.getBlock() != null ? s.getBlock().getId() : null;
+        String blockCourseCode = s.getBlock() != null ? s.getBlock().getCourseCode() : null;
+        Integer blockYearLevel = s.getBlock() != null ? s.getBlock().getYearLevel() : null;
+        return new SectionDto(s.getId(), blockId, s.getSectionCode(),
                 s.getSubject().getSubjectCode(), s.getSubject().getSubjectName(), s.getSubject().getUnits(),
                 f == null ? null : f.getId(), f == null ? null : f.getName(),
                 s.getSchedules().stream().map(DtoMapper::schedule).toList(),
-                s.getCapacity(), s.getCurrentCount(), s.getAvailableSlots(), s.isFull());
+                s.getCapacity(), s.getCurrentCount(), s.getAvailableSlots(), s.isFull(),
+                blockCourseCode, blockYearLevel);
+    }
+
+    public static SectionBlockDto sectionBlock(com.schoolsystem.entity.SectionBlock b) {
+        List<SectionDto> classDtos = b.getSections() != null
+                ? b.getSections().stream().map(DtoMapper::section).toList()
+                : List.of();
+        return new SectionBlockDto(
+                b.getId(),
+                b.getSectionCode(),
+                b.getCourseCode(),
+                b.getYearLevel(),
+                b.getCapacity(),
+                classDtos.size(),
+                classDtos
+        );
     }
 
     public static SubjectDto subject(Subject s) {

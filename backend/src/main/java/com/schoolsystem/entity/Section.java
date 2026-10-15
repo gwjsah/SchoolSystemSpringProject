@@ -1,9 +1,7 @@
 package com.schoolsystem.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,7 +12,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "sections", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_section_code_subject", columnNames = {"sectionCode", "subject_id"})
+        @UniqueConstraint(name = "uk_block_subject", columnNames = {"block_id", "subject_id"})
 })
 @Getter
 @Setter
@@ -26,33 +24,24 @@ public class Section {
     @Column(length = 36, nullable = false, updatable = false)
     private String id;
 
-    /** Example: "IT-G1". */
-    @NotBlank(message = "Section code is required")
-    @Column(nullable = false)
-    private String sectionCode;
+    @NotNull(message = "Section block is required")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "block_id", nullable = false)
+    private SectionBlock block;
 
     @NotNull(message = "Subject is required")
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "subject_id", nullable = false)
     private Subject subject;
 
-    /** Nullable: the old code did not require a faculty member. */
+    /** Nullable: the faculty member can be assigned or unassigned. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "faculty_id")
     private Faculty faculty;
 
-    /** One schedule per day/time slot (old scheduleIds list). */
-    @ManyToMany
-    @JoinTable(
-            name = "section_schedules",
-            joinColumns = @JoinColumn(name = "section_id"),
-            inverseJoinColumns = @JoinColumn(name = "schedule_id"))
+    /** One-to-many schedule slots owned exclusively by this section. */
+    @OneToMany(mappedBy = "section", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Schedule> schedules = new ArrayList<>();
-
-    @Min(value = 1, message = "Invalid capacity size")
-    @Max(value = 50, message = "Invalid capacity size")
-    @Column(nullable = false)
-    private int capacity;
 
     @Min(0)
     @Column(nullable = false)
@@ -62,16 +51,36 @@ public class Section {
     @Version
     private Long version;
 
+    public String getSectionCode() {
+        return block != null ? block.getSectionCode() : null;
+    }
+
+    public void setSectionCode(String sectionCode) {
+        if (block != null) {
+            block.setSectionCode(sectionCode);
+        }
+    }
+
+    public int getCapacity() {
+        return block != null ? block.getCapacity() : 0;
+    }
+
+    public void setCapacity(int capacity) {
+        if (block != null) {
+            block.setCapacity(capacity);
+        }
+    }
+
     public int getAvailableSlots() {
-        return capacity - currentCount;
+        return getCapacity() - currentCount;
     }
 
     public boolean isFull() {
-        return currentCount >= capacity;
+        return currentCount >= getCapacity();
     }
 
     public void incrementCurrentCount() {
-        if (currentCount >= capacity) {
+        if (currentCount >= getCapacity()) {
             throw new IllegalStateException("Section is already full");
         }
         currentCount++;
