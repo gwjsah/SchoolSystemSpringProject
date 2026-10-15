@@ -283,11 +283,21 @@ function EnrollmentFlow({ onConfirmed }) {
   const cartCodes = new Set(cart.map((item) => item.subjectCode))
   const cost = estimateCost(cartUnits)
 
-  // Group available subjects by semester
+  // Group available subjects by semester (reading from curriculumPlacements or fallback to available term)
   const bySemester = (subjects.data ?? []).reduce((groups, s) => {
-    ;(groups[s.semester] ??= []).push(s)
+    const sem = s.curriculumPlacements?.[0]?.semester || 'FIRST'
+    ;(groups[sem] ??= []).push(s)
     return groups
   }, {})
+
+  // Sort subjects within each semester group: recommended first, then by code
+  for (const sem in bySemester) {
+    bySemester[sem].sort((a, b) => {
+      if (a.recommended && !b.recommended) return -1
+      if (!a.recommended && b.recommended) return 1
+      return (a.subjectCode || '').localeCompare(b.subjectCode || '')
+    })
+  }
 
   const scrollToTimetable = () => {
     setViewMode('planner')
@@ -406,6 +416,11 @@ function EnrollmentFlow({ onConfirmed }) {
                             )}
                           </div>
                           <span className="shrink-0 text-sm text-slate-500 dark:text-slate-400">{subject.units} units</span>
+                          {subject.recommended && !inCart && (
+                            <Badge tone="blue" size="sm">
+                              Recommended
+                            </Badge>
+                          )}
                           {inCart && <Badge tone="green">In cart</Badge>}
                         </button>
 

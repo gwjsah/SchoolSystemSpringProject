@@ -6,11 +6,14 @@ import com.schoolsystem.dto.Requests.FacultyUpdateRequest;
 import com.schoolsystem.dto.Responses.FacultyDetailDto;
 import com.schoolsystem.dto.Responses.SectionDto;
 import com.schoolsystem.dto.Responses.SubjectDto;
+import com.schoolsystem.entity.Department;
 import com.schoolsystem.entity.Faculty;
 import com.schoolsystem.entity.Section;
 import com.schoolsystem.entity.Subject;
+import com.schoolsystem.exception.ConflictException;
 import com.schoolsystem.exception.NotFoundException;
 import com.schoolsystem.repository.AccountRepository;
+import com.schoolsystem.repository.DepartmentRepository;
 import com.schoolsystem.repository.FacultyRepository;
 import com.schoolsystem.repository.SectionRepository;
 import com.schoolsystem.repository.SubjectRepository;
@@ -27,6 +30,7 @@ import java.util.List;
 public class FacultyService {
 
     private final FacultyRepository facultyRepository;
+    private final DepartmentRepository departmentRepository;
     private final AccountRepository accountRepository;
     private final SubjectRepository subjectRepository;
     private final SectionRepository sectionRepository;
@@ -39,15 +43,18 @@ public class FacultyService {
         String dept = department == null ? "" : department.trim().toLowerCase();
 
         return facultyRepository.findAll().stream()
-                .filter(f -> dept.isBlank() || (f.getDepartment() != null && f.getDepartment().toLowerCase().contains(dept)))
+                .filter(f -> dept.isBlank() || (f.getDepartment() != null &&
+                        (f.getDepartment().getCode().toLowerCase().contains(dept) ||
+                         f.getDepartment().getName().toLowerCase().contains(dept))))
                 .filter(f -> {
                     if (q.isBlank()) return true;
                     String name = f.getName() != null ? f.getName().toLowerCase() : "";
                     String email = f.getEmail() != null ? f.getEmail().toLowerCase() : "";
                     String emp = f.getEmployeeNumber() != null ? f.getEmployeeNumber().toLowerCase() : "";
-                    String d = f.getDepartment() != null ? f.getDepartment().toLowerCase() : "";
+                    String dCode = f.getDepartment() != null ? f.getDepartment().getCode().toLowerCase() : "";
+                    String dName = f.getDepartment() != null ? f.getDepartment().getName().toLowerCase() : "";
                     String pos = f.getPosition() != null ? f.getPosition().toLowerCase() : "";
-                    return name.contains(q) || email.contains(q) || emp.contains(q) || d.contains(q) || pos.contains(q);
+                    return name.contains(q) || email.contains(q) || emp.contains(q) || dCode.contains(q) || dName.contains(q) || pos.contains(q);
                 })
                 .sorted(Comparator.comparing(Faculty::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(this::toDetailDto)
@@ -76,13 +83,15 @@ public class FacultyService {
             throw new IllegalArgumentException("Employee number already exists: " + employeeNumber);
         }
 
+        Department dept = resolveDepartment(req.departmentId(), req.department());
+
         Faculty f = new Faculty();
         f.setName(req.name().trim());
         f.setEmail(email);
         f.setPassword(passwordEncoder.encode(req.password()));
         f.setContactNumber(req.contactNumber() != null ? req.contactNumber().trim() : null);
         f.setEmployeeNumber(employeeNumber);
-        f.setDepartment(req.department().trim());
+        f.setDepartment(dept);
         f.setPosition(req.position().trim());
 
         return toDetailDto(facultyRepository.save(f));
@@ -106,10 +115,22 @@ public class FacultyService {
             f.setEmployeeNumber(emp);
         }
 
+        Department targetDept = resolveDepartment(req.departmentId(), req.department());
+        if (f.getDepartment() != null && !f.getDepartment().getId().equals(targetDept.getId())) {
+            // Guard: check if assigned to subjects in the current department
+            List<Subject> currentSubjects = subjectRepository.findByAssignedFaculties_Id(f.getId());
+            if (!currentSubjects.isEmpty()) {
+                throw new ConflictException(String.format(
+                        "Cannot transfer faculty %s to department '%s' because they are assigned to teach %d subject(s) in department '%s'. Reassign or remove those subject assignments first.",
+                        f.getName(), targetDept.getName(), currentSubjects.size(), f.getDepartment().getName()
+                ));
+            }
+        }
+
         f.setName(req.name().trim());
         f.setEmail(email);
         f.setContactNumber(req.contactNumber() != null ? req.contactNumber().trim() : null);
-        f.setDepartment(req.department().trim());
+        f.setDepartment(targetDept);
         f.setPosition(req.position().trim());
 
         if (req.password() != null && !req.password().isBlank()) {
@@ -150,17 +171,35 @@ public class FacultyService {
                 .map(DtoMapper::section)
                 .toList();
 
+        Department d = f.getDepartment();
+
         return new FacultyDetailDto(
                 f.getId(),
                 f.getName(),
                 f.getEmail(),
                 f.getContactNumber(),
                 f.getEmployeeNumber(),
-                f.getDepartment(),
+                d != null ? d.getName() : null,
+                d != null ? d.getId() : null,
+                d != null ? d.getCode() : null,
                 f.getPosition(),
                 assignedSubjects,
                 sections
         );
+    }
+
+    private Department resolveDepartment(String deptId, String deptNameOrCode) {
+        if (deptId != null && !deptId.isBlank()) {
+            return departmentRepository.findById(deptId.trim())
+                    .orElseThrow(() -> new NotFoundException("Department not found with ID: " + deptId));
+        }
+        if (deptNameOrCode != null && !deptNameOrCode.isBlank()) {
+            String trimmed = deptNameOrCode.trim();
+            return departmentRepository.findByCodeIgnoreCase(trimmed)
+                    .or(() -> departmentRepository.findByNameIgnoreCase(trimmed))
+                    .orElseThrow(() -> new NotFoundException("Department not found: " + trimmed));
+        }
+        throw new IllegalArgumentException("Department is required.");
     }
 
     private String generateEmployeeNumber() {
@@ -173,4 +212,3 @@ public class FacultyService {
         return candidate;
     }
 }
-

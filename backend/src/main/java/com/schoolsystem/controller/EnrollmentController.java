@@ -52,7 +52,10 @@ public class EnrollmentController {
 
     @GetMapping("/subjects")
     public List<SubjectDto> availableSubjects(@AuthenticationPrincipal AuthUser user) {
-        return enrollmentService.getAvailableSubjects(user.id()).stream().map(DtoMapper::subject).toList();
+        java.util.Set<String> recommendedCodes = enrollmentService.getRecommendedSubjectCodes(user.id());
+        return enrollmentService.getAvailableSubjects(user.id()).stream()
+                .map(s -> DtoMapper.subject(s, java.util.List.of(), recommendedCodes.contains(s.getSubjectCode())))
+                .toList();
     }
 
     @GetMapping("/subjects/{subjectCode}/sections")

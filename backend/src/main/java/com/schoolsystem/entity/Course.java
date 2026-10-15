@@ -30,4 +30,8 @@ public class Course {
     @NotBlank(message = "Section prefix is required")
     @Column(nullable = false)
     private String sectionPrefix;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    private Department department;
 }

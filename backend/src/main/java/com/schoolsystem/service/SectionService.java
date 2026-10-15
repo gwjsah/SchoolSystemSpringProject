@@ -98,8 +98,8 @@ public class SectionService {
                     .orElseThrow(() -> new NotFoundException("Section block not found: " + blockId));
         } else if (sectionCode != null && !sectionCode.trim().isEmpty()) {
             String trimmedCode = sectionCode.trim().toUpperCase();
-            String cCode = (courseCode != null && !courseCode.isBlank()) ? courseCode.trim().toUpperCase() : subject.getCourse();
-            int yLevel = (yearLevel != null && yearLevel > 0) ? yearLevel : subject.getYearLevel();
+            String cCode = (courseCode != null && !courseCode.isBlank()) ? courseCode.trim().toUpperCase() : "BSCS";
+            int yLevel = (yearLevel != null && yearLevel > 0) ? yearLevel : 1;
             int cap = (capacity != null && capacity > 0) ? capacity : 35;
 
             Optional<SectionBlock> existingBlock = sectionBlockRepository
@@ -116,8 +116,8 @@ public class SectionService {
                 block = sectionBlockRepository.save(block);
             }
         } else {
-            String cCode = subject.getCourse();
-            int yLevel = subject.getYearLevel();
+            String cCode = (courseCode != null && !courseCode.isBlank()) ? courseCode.trim().toUpperCase() : "BSCS";
+            int yLevel = (yearLevel != null && yearLevel > 0) ? yearLevel : 1;
             String genCode = generateSectionCode(cCode, yLevel);
             int cap = (capacity != null && capacity > 0) ? capacity : 35;
             block = new SectionBlock(genCode, cCode, yLevel, cap);
@@ -506,16 +506,16 @@ public class SectionService {
 
             String effectiveCourse = bulkReq.courseCode() != null && !bulkReq.courseCode().isBlank()
                     ? bulkReq.courseCode().trim().toUpperCase()
-                    : (subject != null ? subject.getCourse() : "BSCS");
+                    : "BSCS";
             int effectiveYear = bulkReq.yearLevel() != null && bulkReq.yearLevel() > 0
                     ? bulkReq.yearLevel()
-                    : (subject != null ? subject.getYearLevel() : 1);
+                    : 1;
 
             String sectionCode = blockCode != null
                     ? blockCode
                     : (req.sectionCode() != null && !req.sectionCode().isBlank()
                         ? req.sectionCode().trim().toUpperCase()
-                        : (subject != null ? generateSectionCode(subject.getCourse(), subject.getYearLevel()) : "TBD"));
+                        : generateSectionCode(effectiveCourse, effectiveYear));
 
             if (subject != null) {
                 String pairKey = subject.getSubjectCode() + "::" + sectionCode;

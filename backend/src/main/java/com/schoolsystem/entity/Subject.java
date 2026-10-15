@@ -1,7 +1,7 @@
 package com.schoolsystem.entity;
 
-import com.schoolsystem.entity.enums.Semester;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -36,18 +36,21 @@ public class Subject {
     @Column(nullable = false)
     private int units;
 
-    @Positive(message = "Year level must be positive")
-    @Column(nullable = false)
-    private int yearLevel;
+    @Min(value = 0, message = "Lecture units cannot be negative")
+    @Column(name = "lecture_units", nullable = false)
+    private int lectureUnits = 1;
 
-    @NotNull(message = "Semester is required")
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Semester semester;
+    @Min(value = 0, message = "Lab units cannot be negative")
+    @Column(name = "lab_units", nullable = false)
+    private int labUnits = 2;
 
-    @NotBlank(message = "Course is required")
-    @Column(nullable = false)
-    private String course;
+    @Column(name = "open_to_all", nullable = false)
+    private boolean openToAll = false;
+
+    @NotNull(message = "Owning department is required")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "department_id", nullable = false)
+    private Department department;
 
     /** Assumed to hold subject codes, like the old List<String>. */
     @ElementCollection(fetch = FetchType.EAGER)
@@ -64,11 +67,22 @@ public class Subject {
     )
     private List<Faculty> assignedFaculties = new ArrayList<>();
 
+    @OneToMany(mappedBy = "subject", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CurriculumEntry> curriculumEntries = new ArrayList<>();
+
+    @OneToMany(mappedBy = "subject", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<SubjectCourseOverride> courseOverrides = new ArrayList<>();
+
     public void setPrerequisites(List<String> prerequisites) {
         this.prerequisites = prerequisites != null ? prerequisites : new ArrayList<>();
     }
 
     public void setAssignedFaculties(List<Faculty> assignedFaculties) {
         this.assignedFaculties = assignedFaculties != null ? assignedFaculties : new ArrayList<>();
+    }
+
+    /** Synchronizes total units from lecture and lab units. */
+    public void syncUnits() {
+        this.units = this.lectureUnits + this.labUnits;
     }
 }

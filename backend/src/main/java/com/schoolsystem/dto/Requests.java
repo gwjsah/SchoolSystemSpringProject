@@ -43,14 +43,31 @@ public final class Requests {
             String roomId,
             RoomType slotType) {}
 
+    public record DepartmentRequest(
+            @NotBlank(message = "Department code is required") String code,
+            @NotBlank(message = "Department name is required") String name,
+            String description) {}
+
+    public record CurriculumEntryRequest(
+            @NotBlank(message = "Course code is required") String courseCode,
+            @NotBlank(message = "Subject code is required") String subjectCode,
+            @Positive(message = "Year level must be positive") int yearLevel,
+            @NotNull(message = "Semester is required") com.schoolsystem.entity.enums.Semester semester) {}
+
+    public record SubjectCourseOverrideRequest(
+            @NotBlank String courseCode,
+            @NotNull com.schoolsystem.entity.enums.OverrideType type) {}
+
     public record SubjectRequest(
             @NotBlank(message = "Subject code is required") String subjectCode,
             @NotBlank(message = "Subject name is required") String subjectName,
-            @Positive(message = "Units must be positive") int units,
-            @Positive(message = "Year level must be positive") int yearLevel,
-            @NotNull(message = "Semester is required") com.schoolsystem.entity.enums.Semester semester,
-            @NotBlank(message = "Course is required") String course,
-            List<String> prerequisites) {}
+            @jakarta.validation.constraints.Min(value = 0, message = "Lecture units cannot be negative") int lectureUnits,
+            @jakarta.validation.constraints.Min(value = 0, message = "Lab units cannot be negative") int labUnits,
+            Boolean openToAll,
+            @NotBlank(message = "Department is required") String departmentId,
+            List<String> prerequisites,
+            List<String> assignedFacultyIds,
+            List<SubjectCourseOverrideRequest> overrides) {}
 
     public record AssignFacultyRequest(List<String> facultyIds) {}
 
@@ -172,7 +189,8 @@ public final class Requests {
             @NotBlank(message = "Password is required") @jakarta.validation.constraints.Size(min = 6) String password,
             String contactNumber,
             String employeeNumber,
-            @NotBlank(message = "Department cannot be empty") String department,
+            String department,
+            String departmentId,
             @NotBlank(message = "Position cannot be empty") String position) {}
 
     public record FacultyUpdateRequest(
@@ -180,7 +198,8 @@ public final class Requests {
             @NotBlank(message = "Email is required") @jakarta.validation.constraints.Email String email,
             String contactNumber,
             String employeeNumber,
-            @NotBlank(message = "Department cannot be empty") String department,
+            String department,
+            String departmentId,
             @NotBlank(message = "Position cannot be empty") String position,
             String password) {}
 

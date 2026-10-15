@@ -1570,7 +1570,7 @@ export default function AdminSchedulesPage() {
                   >
                     {subjectList.map((subj) => (
                       <option key={subj.subjectCode} value={subj.subjectCode}>
-                        {subj.subjectCode} — {subj.subjectName} ({subj.units} units · {subj.course})
+                        {subj.subjectCode} — {subj.subjectName} ({subj.units} units · {subj.departmentCode || subj.departmentName || 'GE'})
                         {subj.assignedFaculty && subj.assignedFaculty.length > 0
                           ? ` [${subj.assignedFaculty.length} assigned faculty]`
                           : ''}

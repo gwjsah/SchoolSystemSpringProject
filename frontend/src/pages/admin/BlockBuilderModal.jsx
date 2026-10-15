@@ -18,7 +18,7 @@ import api, { getErrorMessage } from '../../api/client'
 import { Alert, Badge, Button, Field, inputClass } from '../../components/ui'
 import { formatTime } from '../../lib/format'
 import BlockTimetable from './BlockTimetable'
-import { toMinutes } from './blockTimetableHelpers'
+import { toMinutes, minutesToTime, deriveSlotLinesForSubject, GRID_END } from './blockTimetableHelpers'
 
 const WEEKDAYS = [
   { key: 'MONDAY', label: 'Monday', short: 'Mon' },
@@ -69,6 +69,26 @@ export default function BlockBuilderModal({
   const [blockName, setBlockName] = useState('')
   const [blockCapacity, setBlockCapacity] = useState(35)
 
+  // Fetch active term to default the semester selection (fallback to FIRST)
+  useEffect(() => {
+    let mounted = true
+    api.get('/academic-periods/term/active')
+      .then((res) => {
+        if (mounted && res.data?.semester) {
+          setSelectedSemester(res.data.semester)
+        }
+      })
+      .catch(() => {
+        // No active term set: fallback to FIRST
+        if (mounted) {
+          setSelectedSemester('FIRST')
+        }
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   // Subject rows for the builder
   const [rows, setRows] = useState([])
   const [validating, setValidating] = useState(false)
@@ -76,23 +96,27 @@ export default function BlockBuilderModal({
   const [submitting, setSubmitting] = useState(false)
   const [modalError, setModalError] = useState(null)
 
-  // Active slot being placed on timetable: { subjectCode, slotType: 'LECTURE' | 'LAB', rowIdx }
+  // Active slot being placed on timetable: { subjectCode, lineId, slotType, label, rowIdx }
   const [activeSlot, setActiveSlot] = useState(null)
 
   // Add extra subject selector state
   const [showAddSubject, setShowAddSubject] = useState(false)
   const [extraSubjectCode, setExtraSubjectCode] = useState('')
 
-  // Auto-select first row's Lecture slot when rows load (Option A)
+  // Auto-select first row's first slot when rows load
   useEffect(() => {
     if (rows.length > 0) {
       setActiveSlot((prev) => {
         if (prev && rows.some((r, i) => i === prev.rowIdx && r.subjectCode === prev.subjectCode)) {
           return prev
         }
+        const firstRow = rows[0]
+        const firstLine = firstRow.lines?.find((l) => l.enabled) || firstRow.lines?.[0]
         return {
-          subjectCode: rows[0].subjectCode,
-          slotType: 'LECTURE',
+          subjectCode: firstRow.subjectCode,
+          lineId: firstLine?.id || 'lec',
+          slotType: firstLine?.slotType || 'LECTURE',
+          label: firstLine?.label || 'Lecture',
           rowIdx: 0,
         }
       })
@@ -170,50 +194,70 @@ export default function BlockBuilderModal({
     if (!selectedCourse) return
 
     const matching = subjects.filter((s) => {
-      const matchCourse = (s.course || '').toUpperCase() === selectedCourse.toUpperCase()
-      const matchYear = Number(s.yearLevel) === Number(selectedYear)
-      const matchSem = (s.semester || '').toUpperCase() === selectedSemester.toUpperCase()
-      return matchCourse && matchYear && matchSem
+      // Check if subject has a curriculum placement for selected course, year, and semester
+      const placements = s.curriculumPlacements || []
+      const matchPlacement = placements.some(
+        (cp) =>
+          cp.courseCode?.toUpperCase() === selectedCourse.toUpperCase() &&
+          Number(cp.yearLevel) === Number(selectedYear) &&
+          cp.semester?.toUpperCase() === selectedSemester.toUpperCase()
+      )
+      return matchPlacement
     })
 
     const initialRows = matching.map((subj, i) => {
-      // Rotate lecture day and lab day across Monday–Saturday (never Sunday)
-      const lecDay = WEEKDAYS[i % WEEKDAYS.length].key
-      const labDay = WEEKDAYS[(i + 2) % WEEKDAYS.length].key
-
-      const lecStart = i % 2 === 0 ? '08:00' : '10:00'
-      const lecEnd = i % 2 === 0 ? '10:00' : '12:00'
-
-      const labStart = i % 2 === 0 ? '13:00' : '16:00'
-      const labEnd = i % 2 === 0 ? '16:00' : '19:00'
-
       const defaultFacId = subj.assignedFaculty && subj.assignedFaculty.length > 0
         ? subj.assignedFaculty[0].id
         : ''
+
+      // Derive schedule lines based on units
+      const derivedTemplate = deriveSlotLinesForSubject(subj)
+      const lines = derivedTemplate.map((tmpl, lineIdx) => {
+        const dayIdx = (i * 2 + lineIdx) % WEEKDAYS.length
+        const day = WEEKDAYS[dayIdx].key
+
+        // Choose initial non-overlapping time windows
+        let startTime = '08:00'
+        let endTime = '09:30'
+        if (tmpl.defaultDurationMinutes === 180) {
+          startTime = i % 2 === 0 ? '13:00' : '16:00'
+          endTime = i % 2 === 0 ? '16:00' : '19:00'
+        } else if (tmpl.defaultDurationMinutes === 120) {
+          startTime = i % 2 === 0 ? '08:00' : '10:00'
+          endTime = i % 2 === 0 ? '10:00' : '12:00'
+        } else {
+          // 90 minutes
+          const baseHours = ['08:00', '09:30', '11:00', '13:30', '15:00', '16:30']
+          startTime = baseHours[(i + lineIdx) % baseHours.length]
+          const startM = toMinutes(startTime)
+          endTime = minutesToTime(Math.min(GRID_END, startM + 90))
+        }
+
+        return {
+          id: tmpl.id,
+          label: tmpl.label,
+          slotType: tmpl.slotType,
+          enabled: !tmpl.isOptional, // Optional field subjects default to unchecked
+          day,
+          startTime,
+          endTime,
+          roomId: 'AUTO',
+          roomRequired: tmpl.roomRequired,
+          note: tmpl.note,
+        }
+      })
 
       return {
         subjectCode: subj.subjectCode,
         subjectName: subj.subjectName,
         units: subj.units,
-        course: subj.course,
+        lectureUnits: subj.lectureUnits,
+        labUnits: subj.labUnits,
+        departmentCode: subj.departmentCode,
+        departmentName: subj.departmentName,
         assignedFaculty: subj.assignedFaculty || [],
         facultyId: defaultFacId,
-        lecture: {
-          enabled: true,
-          day: lecDay,
-          startTime: lecStart,
-          endTime: lecEnd,
-          roomId: 'AUTO',
-          slotType: 'LECTURE',
-        },
-        lab: {
-          enabled: true,
-          day: labDay,
-          startTime: labStart,
-          endTime: labEnd,
-          roomId: 'AUTO',
-          slotType: 'LAB',
-        },
+        lines,
       }
     })
 
@@ -231,36 +275,38 @@ export default function BlockBuilderModal({
     setValidationResult(null)
   }
 
-  const updateSlotField = (index, slotType, field, value) => {
+  const updateLineField = (rowIndex, lineId, field, value) => {
     setRows((prev) => {
       const copy = [...prev]
-      copy[index] = {
-        ...copy[index],
-        [slotType]: {
-          ...copy[index][slotType],
-          [field]: value,
-        },
-      }
+      const row = copy[rowIndex]
+      if (!row || !row.lines) return prev
+      const newLines = row.lines.map((l) => (l.id === lineId ? { ...l, [field]: value } : l))
+      copy[rowIndex] = { ...row, lines: newLines }
       return copy
     })
     setValidationResult(null)
   }
 
   // Timetable placement update handler
-  const handleUpdateSlotTime = (rowIdx, slotType, { day, startTime, endTime }) => {
+  const handleUpdateSlotTime = (rowIdx, lineIdentifier, { day, startTime, endTime }) => {
     setRows((prev) => {
       const copy = [...prev]
-      if (!copy[rowIdx]) return prev
-      const key = slotType === 'LECTURE' ? 'lecture' : 'lab'
-      copy[rowIdx] = {
-        ...copy[rowIdx],
-        [key]: {
-          ...copy[rowIdx][key],
-          day,
-          startTime,
-          endTime,
-        },
-      }
+      const row = copy[rowIdx]
+      if (!row || !row.lines) return prev
+
+      const newLines = row.lines.map((l) => {
+        if (l.id === lineIdentifier || l.slotType === lineIdentifier) {
+          return {
+            ...l,
+            day,
+            startTime,
+            endTime,
+          }
+        }
+        return l
+      })
+
+      copy[rowIdx] = { ...row, lines: newLines }
       return copy
     })
     setValidationResult(null)
@@ -268,15 +314,19 @@ export default function BlockBuilderModal({
 
   // Timetable slot click selector
   const handleSelectSlotByKey = (slotKey) => {
-    const lastDash = slotKey.lastIndexOf('-')
-    if (lastDash === -1) return
-    const code = slotKey.slice(0, lastDash)
-    const type = slotKey.slice(lastDash + 1)
+    const firstDash = slotKey.indexOf('-')
+    if (firstDash === -1) return
+    const code = slotKey.slice(0, firstDash)
+    const lineId = slotKey.slice(firstDash + 1)
     const idx = rows.findIndex((r) => r.subjectCode === code)
     if (idx !== -1) {
+      const row = rows[idx]
+      const line = row.lines?.find((l) => l.id === lineId) || row.lines?.[0]
       setActiveSlot({
         subjectCode: code,
-        slotType: type,
+        lineId: line?.id || lineId,
+        slotType: line?.slotType || 'LECTURE',
+        label: line?.label || 'Lecture',
         rowIdx: idx,
       })
     }
@@ -298,36 +348,53 @@ export default function BlockBuilderModal({
     }
 
     const i = rows.length
-    const lecDay = WEEKDAYS[i % WEEKDAYS.length].key
-    const labDay = WEEKDAYS[(i + 2) % WEEKDAYS.length].key
-
     const defaultFacId = subj.assignedFaculty && subj.assignedFaculty.length > 0
       ? subj.assignedFaculty[0].id
       : ''
+
+    const derivedTemplate = deriveSlotLinesForSubject(subj)
+    const lines = derivedTemplate.map((tmpl, lineIdx) => {
+      const dayIdx = (i * 2 + lineIdx) % WEEKDAYS.length
+      const day = WEEKDAYS[dayIdx].key
+
+      let startTime = '08:00'
+      let endTime = '09:30'
+      if (tmpl.defaultDurationMinutes === 180) {
+        startTime = '13:00'
+        endTime = '16:00'
+      } else if (tmpl.defaultDurationMinutes === 120) {
+        startTime = '10:00'
+        endTime = '12:00'
+      } else {
+        startTime = '10:00'
+        endTime = '11:30'
+      }
+
+      return {
+        id: tmpl.id,
+        label: tmpl.label,
+        slotType: tmpl.slotType,
+        enabled: !tmpl.isOptional,
+        day,
+        startTime,
+        endTime,
+        roomId: 'AUTO',
+        roomRequired: tmpl.roomRequired,
+        note: tmpl.note,
+      }
+    })
 
     const newRow = {
       subjectCode: subj.subjectCode,
       subjectName: subj.subjectName,
       units: subj.units,
-      course: subj.course,
+      lectureUnits: subj.lectureUnits,
+      labUnits: subj.labUnits,
+      departmentCode: subj.departmentCode,
+      departmentName: subj.departmentName,
       assignedFaculty: subj.assignedFaculty || [],
       facultyId: defaultFacId,
-      lecture: {
-        enabled: true,
-        day: lecDay,
-        startTime: '10:00',
-        endTime: '12:00',
-        roomId: 'AUTO',
-        slotType: 'LECTURE',
-      },
-      lab: {
-        enabled: true,
-        day: labDay,
-        startTime: '13:00',
-        endTime: '16:00',
-        roomId: 'AUTO',
-        slotType: 'LAB',
-      },
+      lines,
     }
 
     setRows((prev) => [...prev, newRow])
@@ -346,23 +413,16 @@ export default function BlockBuilderModal({
       capacity: Number(blockCapacity),
       sections: rows.map((r) => {
         const schedules = []
-        if (r.lecture.enabled) {
-          schedules.push({
-            day: r.lecture.day,
-            startTime: `${r.lecture.startTime}:00`,
-            endTime: `${r.lecture.endTime}:00`,
-            roomId: r.lecture.roomId && r.lecture.roomId !== 'AUTO' ? r.lecture.roomId : null,
-            slotType: 'LECTURE',
-          })
-        }
-        if (r.lab.enabled) {
-          schedules.push({
-            day: r.lab.day,
-            startTime: `${r.lab.startTime}:00`,
-            endTime: `${r.lab.endTime}:00`,
-            roomId: r.lab.roomId && r.lab.roomId !== 'AUTO' ? r.lab.roomId : null,
-            slotType: 'LAB',
-          })
+        for (const line of r.lines || []) {
+          if (line.enabled && line.day && line.startTime && line.endTime) {
+            schedules.push({
+              day: line.day,
+              startTime: line.startTime.includes(':00', 3) ? line.startTime : `${line.startTime}:00`,
+              endTime: line.endTime.includes(':00', 3) ? line.endTime : `${line.endTime}:00`,
+              roomId: line.roomId && line.roomId !== 'AUTO' ? line.roomId : null,
+              slotType: line.slotType || 'LECTURE',
+            })
+          }
         }
         return {
           subjectCode: r.subjectCode,
@@ -405,8 +465,11 @@ export default function BlockBuilderModal({
         setModalError(`Subject ${r.subjectCode} has no instructor selected. Please assign an instructor.`)
         return
       }
-      if (!r.lecture.enabled && !r.lab.enabled) {
-        setModalError(`Subject ${r.subjectCode} must have at least one meeting slot (Lecture or Lab).`)
+      const enabledLines = (r.lines || []).filter((l) => l.enabled)
+      // Allow 0 schedules only if subject is a practicum / field subject where room is not required
+      const isFieldOnly = (r.lines || []).every((l) => l.roomRequired === false)
+      if (enabledLines.length === 0 && !isFieldOnly) {
+        setModalError(`Subject ${r.subjectCode} must have at least one enabled meeting slot.`)
         return
       }
     }
@@ -672,7 +735,7 @@ export default function BlockBuilderModal({
                     <option value="">-- Select Subject from Catalog --</option>
                     {availableExtraSubjects.map((s) => (
                       <option key={s.subjectCode} value={s.subjectCode}>
-                        [{s.course}] {s.subjectCode} — {s.subjectName} ({s.units} units, Year {s.yearLevel})
+                        [{s.departmentCode || s.departmentName || 'GE'}] {s.subjectCode} — {s.subjectName} ({s.units} units)
                       </option>
                     ))}
                   </select>
@@ -686,6 +749,26 @@ export default function BlockBuilderModal({
                   Add to Block
                 </Button>
               </div>
+              {(() => {
+                if (!extraSubjectCode) return null
+                const subj = availableExtraSubjects.find((s) => s.subjectCode === extraSubjectCode)
+                if (!subj) return null
+                const isCurriculumSubject = (subj.curriculumPlacements || []).some(
+                  (cp) => cp.courseCode?.toUpperCase() === selectedCourse?.toUpperCase()
+                )
+                const isEligible = isCurriculumSubject || subj.openToAll || (subj.eligibleCourses || []).includes(selectedCourse)
+                if (!isEligible) {
+                  return (
+                    <div className="flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-2 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Notice: <strong>{subj.subjectCode}</strong> is not listed on {selectedCourse}'s standard curriculum. Admin override applies when adding this subject.
+                      </span>
+                    </div>
+                  )
+                }
+                return null
+              })()}
             </div>
           )}
 
@@ -728,11 +811,16 @@ export default function BlockBuilderModal({
                             {row.subjectCode}
                           </span>
                           <Badge variant="outline" size="sm">
-                            {row.units} units
+                            {row.units} units ({row.lectureUnits || 0} lec / {row.labUnits || 0} lab)
                           </Badge>
-                          {row.course && (
-                            <Badge tone="slate" size="sm">
-                              {row.course}
+                          {row.departmentCode && (
+                            <Badge tone={row.departmentCode === 'GE' ? 'purple' : 'slate'} size="sm">
+                              {row.departmentCode}
+                            </Badge>
+                          )}
+                          {row.departmentCode && selectedCourse && !selectedCourse.startsWith(row.departmentCode) && row.departmentCode === 'GE' && (
+                            <Badge tone="blue" size="sm">
+                              Shared
                             </Badge>
                           )}
                           {validationItem && isItemValid && (
@@ -785,294 +873,214 @@ export default function BlockBuilderModal({
                       </div>
                     </div>
 
-                    {/* Schedule Slots (Lecture + Lab) */}
+                    {/* Schedule Slot Lines (Mapped from units) */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                      {/* LECTURE SLOT */}
-                      <div
-                        onClick={() =>
-                          setActiveSlot({
-                            subjectCode: row.subjectCode,
-                            slotType: 'LECTURE',
-                            rowIdx: idx,
-                          })
-                        }
-                        className={`rounded-lg border p-2.5 space-y-2 cursor-pointer transition-all ${
-                          activeSlot?.subjectCode === row.subjectCode && activeSlot?.slotType === 'LECTURE'
-                            ? 'border-accent ring-2 ring-accent/30 bg-accent/5 dark:bg-accent/10 shadow-xs'
-                            : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-slate-200">
-                          <span className="flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-blue-500" />
-                            Lecture Slot
-                          </span>
-                          <span className="text-[11px] text-slate-400">Lecture Room</span>
-                        </div>
+                      {(row.lines || []).map((line) => {
+                        const isSlotActive =
+                          activeSlot?.subjectCode === row.subjectCode && activeSlot?.lineId === line.id
+                        const isLab = line.slotType === 'LAB'
 
-                        <div className="flex items-center gap-2">
-                          <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={row.lecture.enabled}
-                              onChange={(e) =>
-                                updateSlotField(idx, 'lecture', 'enabled', e.target.checked)
-                              }
-                              className="rounded border-slate-300 text-accent focus:ring-accent"
-                            />
-                            <span>Include Lecture</span>
-                          </label>
-                        </div>
-
-                        {row.lecture.enabled && (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                            {/* Day */}
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">Day</label>
-                              <select
-                                value={row.lecture.day}
-                                onFocus={() =>
-                                  setActiveSlot({
-                                    subjectCode: row.subjectCode,
-                                    slotType: 'LECTURE',
-                                    rowIdx: idx,
-                                  })
-                                }
-                                onChange={(e) =>
-                                  updateSlotField(idx, 'lecture', 'day', e.target.value)
-                                }
-                                className={`${inputClass} !py-1 text-xs`}
-                              >
-                                {WEEKDAYS.map((d) => (
-                                  <option key={d.key} value={d.key}>
-                                    {d.short}
-                                  </option>
-                                ))}
-                              </select>
+                        return (
+                          <div
+                            key={line.id}
+                            onClick={() =>
+                              setActiveSlot({
+                                subjectCode: row.subjectCode,
+                                lineId: line.id,
+                                slotType: line.slotType,
+                                label: line.label,
+                                rowIdx: idx,
+                              })
+                            }
+                            className={`rounded-lg border p-2.5 space-y-2 cursor-pointer transition-all ${
+                              isSlotActive
+                                ? isLab
+                                  ? 'border-purple-500 ring-2 ring-purple-500/30 bg-purple-50/20 dark:bg-purple-950/20 shadow-xs'
+                                  : 'border-accent ring-2 ring-accent/30 bg-accent/5 dark:bg-accent/10 shadow-xs'
+                                : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-slate-200">
+                              <span className="flex items-center gap-1.5">
+                                <span
+                                  className={`h-2 w-2 rounded-full ${
+                                    isLab ? 'bg-purple-500' : 'bg-blue-500'
+                                  }`}
+                                />
+                                {line.label}
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                {line.roomRequired === false
+                                  ? 'Off-campus (No room)'
+                                  : isLab
+                                  ? 'Computer Lab'
+                                  : 'Lecture Room'}
+                              </span>
                             </div>
 
-                            {/* Start Time */}
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">Start</label>
-                              <select
-                                value={row.lecture.startTime}
-                                onFocus={() =>
-                                  setActiveSlot({
-                                    subjectCode: row.subjectCode,
-                                    slotType: 'LECTURE',
-                                    rowIdx: idx,
-                                  })
-                                }
-                                onChange={(e) =>
-                                  updateSlotField(idx, 'lecture', 'startTime', e.target.value)
-                                }
-                                className={`${inputClass} !py-1 text-xs font-mono`}
-                              >
-                                {TIME_SLOTS.map((t) => (
-                                  <option key={t} value={t}>
-                                    {formatTime(t)}
-                                  </option>
-                                ))}
-                              </select>
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={line.enabled}
+                                  onChange={(e) =>
+                                    updateLineField(idx, line.id, 'enabled', e.target.checked)
+                                  }
+                                  className={`rounded border-slate-300 ${
+                                    isLab
+                                      ? 'text-purple-600 focus:ring-purple-500'
+                                      : 'text-accent focus:ring-accent'
+                                  }`}
+                                />
+                                <span>{line.enabled ? 'Include on Schedule' : 'Schedule Omitted / Optional'}</span>
+                              </label>
+                              {line.note && (
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                  {line.note}
+                                </span>
+                              )}
                             </div>
 
-                            {/* End Time */}
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">End</label>
-                              <select
-                                value={row.lecture.endTime}
-                                onFocus={() =>
-                                  setActiveSlot({
-                                    subjectCode: row.subjectCode,
-                                    slotType: 'LECTURE',
-                                    rowIdx: idx,
-                                  })
-                                }
-                                onChange={(e) =>
-                                  updateSlotField(idx, 'lecture', 'endTime', e.target.value)
-                                }
-                                className={`${inputClass} !py-1 text-xs font-mono`}
-                              >
-                                {END_TIME_SLOTS.filter((t) => t > row.lecture.startTime).map(
-                                  (t) => (
-                                    <option key={t} value={t}>
-                                      {formatTime(t)}
-                                    </option>
-                                  )
-                                )}
-                              </select>
-                            </div>
+                            {line.enabled && (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                                {/* Day */}
+                                <div>
+                                  <label className="text-[10px] text-slate-400 block mb-0.5">Day</label>
+                                  <select
+                                    value={line.day}
+                                    onFocus={() =>
+                                      setActiveSlot({
+                                        subjectCode: row.subjectCode,
+                                        lineId: line.id,
+                                        slotType: line.slotType,
+                                        label: line.label,
+                                        rowIdx: idx,
+                                      })
+                                    }
+                                    onChange={(e) =>
+                                      updateLineField(idx, line.id, 'day', e.target.value)
+                                    }
+                                    className={`${inputClass} !py-1 text-xs`}
+                                  >
+                                    {WEEKDAYS.map((d) => (
+                                      <option key={d.key} value={d.key}>
+                                        {d.short}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
 
-                            {/* Room */}
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">Room</label>
-                              <select
-                                value={row.lecture.roomId}
-                                onFocus={() =>
-                                  setActiveSlot({
-                                    subjectCode: row.subjectCode,
-                                    slotType: 'LECTURE',
-                                    rowIdx: idx,
-                                  })
-                                }
-                                onChange={(e) =>
-                                  updateSlotField(idx, 'lecture', 'roomId', e.target.value)
-                                }
-                                className={`${inputClass} !py-1 text-xs`}
-                              >
-                                <option value="AUTO">✨ Auto (Best fit)</option>
-                                {lectureRooms.map((r) => (
-                                  <option key={r.id} value={r.id}>
-                                    {r.roomName} (Cap {r.capacity})
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                                {/* Start Time */}
+                                <div>
+                                  <label className="text-[10px] text-slate-400 block mb-0.5">Start</label>
+                                  <select
+                                    value={line.startTime}
+                                    onFocus={() =>
+                                      setActiveSlot({
+                                        subjectCode: row.subjectCode,
+                                        lineId: line.id,
+                                        slotType: line.slotType,
+                                        label: line.label,
+                                        rowIdx: idx,
+                                      })
+                                    }
+                                    onChange={(e) =>
+                                      updateLineField(idx, line.id, 'startTime', e.target.value)
+                                    }
+                                    className={`${inputClass} !py-1 text-xs font-mono`}
+                                  >
+                                    {TIME_SLOTS.map((t) => (
+                                      <option key={t} value={t}>
+                                        {formatTime(t)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* End Time */}
+                                <div>
+                                  <label className="text-[10px] text-slate-400 block mb-0.5">End</label>
+                                  <select
+                                    value={line.endTime}
+                                    onFocus={() =>
+                                      setActiveSlot({
+                                        subjectCode: row.subjectCode,
+                                        lineId: line.id,
+                                        slotType: line.slotType,
+                                        label: line.label,
+                                        rowIdx: idx,
+                                      })
+                                    }
+                                    onChange={(e) =>
+                                      updateLineField(idx, line.id, 'endTime', e.target.value)
+                                    }
+                                    className={`${inputClass} !py-1 text-xs font-mono`}
+                                  >
+                                    {END_TIME_SLOTS.filter((t) => t > line.startTime).map((t) => (
+                                      <option key={t} value={t}>
+                                        {formatTime(t)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Room */}
+                                <div>
+                                  <label className="text-[10px] text-slate-400 block mb-0.5">Room</label>
+                                  <select
+                                    value={line.roomId}
+                                    disabled={line.roomRequired === false}
+                                    onFocus={() =>
+                                      setActiveSlot({
+                                        subjectCode: row.subjectCode,
+                                        lineId: line.id,
+                                        slotType: line.slotType,
+                                        label: line.label,
+                                        rowIdx: idx,
+                                      })
+                                    }
+                                    onChange={(e) =>
+                                      updateLineField(idx, line.id, 'roomId', e.target.value)
+                                    }
+                                    className={`${inputClass} !py-1 text-xs`}
+                                  >
+                                    {line.roomRequired === false ? (
+                                      <option value="AUTO">No room needed (Off-campus)</option>
+                                    ) : (
+                                      <>
+                                        <option value="AUTO">✨ Auto (Best fit)</option>
+                                        {(isLab ? labRooms : lectureRooms).map((r) => (
+                                          <option key={r.id} value={r.id}>
+                                            {r.roomName} (Cap {r.capacity})
+                                          </option>
+                                        ))}
+                                      </>
+                                    )}
+                                  </select>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-
-                      {/* LAB SLOT */}
-                      <div
-                        onClick={() =>
-                          setActiveSlot({
-                            subjectCode: row.subjectCode,
-                            slotType: 'LAB',
-                            rowIdx: idx,
-                          })
-                        }
-                        className={`rounded-lg border p-2.5 space-y-2 cursor-pointer transition-all ${
-                          activeSlot?.subjectCode === row.subjectCode && activeSlot?.slotType === 'LAB'
-                            ? 'border-purple-500 ring-2 ring-purple-500/30 bg-purple-50/20 dark:bg-purple-950/20 shadow-xs'
-                            : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-slate-200">
-                          <span className="flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-purple-500" />
-                            Lab Slot
-                          </span>
-                          <span className="text-[11px] text-slate-400">Computer Lab</span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={row.lab.enabled}
-                              onChange={(e) =>
-                                updateSlotField(idx, 'lab', 'enabled', e.target.checked)
-                              }
-                              className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
-                            />
-                            <span>Include Lab Slot</span>
-                          </label>
-                        </div>
-
-                        {row.lab.enabled && (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                            {/* Day */}
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">Day</label>
-                              <select
-                                value={row.lab.day}
-                                onFocus={() =>
-                                  setActiveSlot({
-                                    subjectCode: row.subjectCode,
-                                    slotType: 'LAB',
-                                    rowIdx: idx,
-                                  })
-                                }
-                                onChange={(e) => updateSlotField(idx, 'lab', 'day', e.target.value)}
-                                className={`${inputClass} !py-1 text-xs`}
-                              >
-                                {WEEKDAYS.map((d) => (
-                                  <option key={d.key} value={d.key}>
-                                    {d.short}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {/* Start Time */}
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">Start</label>
-                              <select
-                                value={row.lab.startTime}
-                                onFocus={() =>
-                                  setActiveSlot({
-                                    subjectCode: row.subjectCode,
-                                    slotType: 'LAB',
-                                    rowIdx: idx,
-                                  })
-                                }
-                                onChange={(e) =>
-                                  updateSlotField(idx, 'lab', 'startTime', e.target.value)
-                                }
-                                className={`${inputClass} !py-1 text-xs font-mono`}
-                              >
-                                {TIME_SLOTS.map((t) => (
-                                  <option key={t} value={t}>
-                                    {formatTime(t)}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {/* End Time */}
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">End</label>
-                              <select
-                                value={row.lab.endTime}
-                                onFocus={() =>
-                                  setActiveSlot({
-                                    subjectCode: row.subjectCode,
-                                    slotType: 'LAB',
-                                    rowIdx: idx,
-                                  })
-                                }
-                                onChange={(e) =>
-                                  updateSlotField(idx, 'lab', 'endTime', e.target.value)
-                                }
-                                className={`${inputClass} !py-1 text-xs font-mono`}
-                              >
-                                {END_TIME_SLOTS.filter((t) => t > row.lab.startTime).map((t) => (
-                                  <option key={t} value={t}>
-                                    {formatTime(t)}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {/* Room */}
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">Room</label>
-                              <select
-                                value={row.lab.roomId}
-                                onFocus={() =>
-                                  setActiveSlot({
-                                    subjectCode: row.subjectCode,
-                                    slotType: 'LAB',
-                                    rowIdx: idx,
-                                  })
-                                }
-                                onChange={(e) =>
-                                  updateSlotField(idx, 'lab', 'roomId', e.target.value)
-                                }
-                                className={`${inputClass} !py-1 text-xs`}
-                              >
-                                <option value="AUTO">✨ Auto (Best fit)</option>
-                                {labRooms.map((r) => (
-                                  <option key={r.id} value={r.id}>
-                                    {r.roomName} (Cap {r.capacity})
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                        )
+                      })}
                     </div>
+
+                    {/* Advisory pattern warnings (Non-blocking) */}
+                    {(() => {
+                      const enabledLines = (row.lines || []).filter((l) => l.enabled)
+                      const lecLines = enabledLines.filter((l) => l.slotType === 'LECTURE')
+                      if (lecLines.length === 2 && lecLines[0].day === lecLines[1].day) {
+                        return (
+                          <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-200 dark:border-amber-900/50">
+                            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                            <span>
+                              Advisory: Both lecture sessions ({lecLines[0].label} & {lecLines[1].label}) are scheduled on the same day ({lecLines[0].day}). Consider a split pattern like Mon/Wed or Tue/Thu.
+                            </span>
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
 
                     {/* Pre-allocated Preview or Conflict Notices */}
                     {validationItem && (

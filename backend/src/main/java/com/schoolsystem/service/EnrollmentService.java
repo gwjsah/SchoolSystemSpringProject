@@ -11,6 +11,7 @@ import com.schoolsystem.entity.Schedule;
 import com.schoolsystem.entity.Section;
 import com.schoolsystem.entity.Student;
 import com.schoolsystem.entity.Subject;
+import com.schoolsystem.entity.TermCalendar;
 import com.schoolsystem.entity.enums.PaymentPlan;
 import com.schoolsystem.entity.enums.Quarter;
 import com.schoolsystem.entity.enums.QuarterStatus;
@@ -54,6 +55,9 @@ public class EnrollmentService {
     private final SectionRepository sectionRepository;
     private final StudentRepository studentRepository;
     private final CartItemRepository cartItemRepository;
+    private final SubjectEligibilityService subjectEligibilityService;
+    private final com.schoolsystem.repository.CurriculumEntryRepository curriculumEntryRepository;
+    private final com.schoolsystem.repository.TermCalendarRepository termCalendarRepository;
 
     // ── GATE CHECK ──────────────────────────────────────────────────────────
 
@@ -84,23 +88,24 @@ public class EnrollmentService {
     // ── SUBJECT SELECTION ───────────────────────────────────────────────────
 
     /**
-     * Determines whether a subject is eligible for a student's course based strictly on the subject's course in the DB:
-     * - 'GEN': open to all students across all programs.
-     * - Matches the student's enrolled course (e.g. BSCS, BSIT).
-     * - 'CSIT': common computing course open to both BSCS and BSIT students.
+     * Determines whether a subject is eligible for a student's course.
      */
-    public static boolean isSubjectEligibleForStudent(Subject subject, String studentCourse) {
-        if (subject == null) return false;
-        String subjectCourse = subject.getCourse() != null ? subject.getCourse().toUpperCase().trim() : "";
-        String studentProg = studentCourse != null ? studentCourse.toUpperCase().trim() : "";
+    public boolean isSubjectEligibleForStudent(Subject subject, String studentCourse) {
+        return subjectEligibilityService.isEligible(studentCourse, subject);
+    }
 
-        if ("GEN".equalsIgnoreCase(subjectCourse)) {
-            return true;
-        }
-        if ("CSIT".equalsIgnoreCase(subjectCourse)) {
-            return studentProg.contains("CS") || studentProg.contains("IT");
-        }
-        return subjectCourse.equalsIgnoreCase(studentProg);
+    /** Returns the set of subject codes recommended for the student based on their course, year level, and the active term semester. */
+    @Transactional(readOnly = true)
+    public Set<String> getRecommendedSubjectCodes(String studentId) {
+        Student student = loadStudent(studentId);
+        Optional<TermCalendar> activeTerm = termCalendarRepository.findFirstByIsActiveTrueOrderByStartsAtDesc();
+        Semester activeSemester = activeTerm.map(TermCalendar::getSemester).orElse(Semester.FIRST);
+
+        return curriculumEntryRepository
+                .findByCourse_CodeIgnoreCaseAndYearLevelAndSemester(student.getCourse(), student.getYearLevel(), activeSemester)
+                .stream()
+                .map(ce -> ce.getSubject().getSubjectCode())
+                .collect(Collectors.toSet());
     }
 
     /** Subjects for the student's year level that match program eligibility from the DB, are not done, not taken, and have prerequisites met. */
@@ -108,7 +113,16 @@ public class EnrollmentService {
     public List<Subject> getAvailableSubjects(String studentId) {
         Student student = loadStudent(studentId);
 
-        List<Subject> candidates = subjectRepository.findByYearLevel(student.getYearLevel());
+        Set<String> curriculumSubjectIds = curriculumEntryRepository
+                .findByCourse_CodeIgnoreCaseAndYearLevel(student.getCourse(), student.getYearLevel())
+                .stream()
+                .map(ce -> ce.getSubject().getId())
+                .collect(Collectors.toSet());
+
+        List<Subject> allSubjects = subjectRepository.findAll();
+        List<Subject> candidates = allSubjects.stream()
+                .filter(s -> curriculumSubjectIds.contains(s.getId()) || (s.isOpenToAll() && subjectEligibilityService.isEligible(student.getCourse(), s)))
+                .toList();
 
         Set<String> completedCodes = completedSubjectRepository.findByStudent_Id(studentId).stream()
                 .map(c -> c.getSubject().getSubjectCode())
@@ -120,7 +134,7 @@ public class EnrollmentService {
                 .collect(Collectors.toSet());
 
         return candidates.stream()
-                .filter(s -> isSubjectEligibleForStudent(s, student.getCourse()))
+                .filter(s -> subjectEligibilityService.isEligible(student.getCourse(), s))
                 .filter(s -> !completedCodes.contains(s.getSubjectCode()))
                 .filter(s -> !enrolledCodes.contains(s.getSubjectCode()))
                 .filter(s -> completedCodes.containsAll(s.getPrerequisites()))

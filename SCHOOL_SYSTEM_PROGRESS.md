@@ -399,5 +399,27 @@ The old code had no service classes for these, so they were left out. Status of 
   - SQL Schema: Created `SQL/attendance.sql`.
   - Postman: Added `Faculty Attendance` folder to `school-api.postman_collection.json`.
 
+### 11.8 Curriculum, Departments, Scheduling & Enrollment Integration (Prompt B)
+- **Block Builder Curriculum Preloading & Units-to-Slots Mapping**:
+  - The Block Builder modal defaults the semester to the active academic term (`GET /academic-periods/term/active`), falling back to `FIRST` if no term is set.
+  - Automatically loads curriculum entries matching `(courseCode, yearLevel, semester)`.
+  - Displays a `"Shared"` badge for subjects belonging to an external department (e.g. `GE` subjects in `BSCS` or `BSIT` blocks).
+  - Centralized single-source function `deriveSlotLinesForSubject(subject)` in `blockTimetableHelpers.js`:
+    - `labUnits >= 10 && lectureUnits === 0` (Practicum / Internship): 1 optional Lab/Field line with off-campus status (no classroom required; optional schedule).
+    - `lectureUnits === 3 && labUnits === 0` (General Education): 2 Lecture lines of 1.5h each (`Lecture 1`, `Lecture 2`).
+    - `lectureUnits === 1 && labUnits > 0` (Standard Major): 1 Lecture line (1.5h default) + 1 Lab line (3.0h default).
+    - `lectureUnits === 2 && labUnits === 0` (Physical Education): 1 Lecture line (2.0h default) with advisory note.
+    - Any other combination: 1 Lecture line + 1 Lab line with "check pattern" note.
+  - Added non-blocking advisory warnings (e.g., when two lecture sessions are scheduled on the same weekday).
+  - Catalog search ("+ Add Extra Subject"): enables adding cross-course subjects across all departments with soft advisory notices when a subject is outside standard course curriculum.
+  - Timetable synchronization: Full two-way synchronization between multi-line draft rows and `BlockTimetable` with drag-placement, cell availability checks, and automatic room allocation previews.
+- **Student Enrollment Curriculum Hinting**:
+  - `GET /enrollment/subjects`: Added additive boolean `recommended` indicating whether the subject is listed on the student's curriculum for `(student.course, student.yearLevel, activeSemester)`.
+  - Non-gating policy: Non-recommended subjects (retakes, electives, advance subjects) remain completely visible and enrollable.
+  - Student Enrollment UI (`EnrollmentPage.jsx`): Displays an elegant `Recommended` badge and automatically sorts recommended subjects to the top within each semester grouping.
+- **Database Populator**:
+  - Updated `DatabasePopulatorService.populateSchedulesAndSections`: Generates conflict-free demo blocks across Year 1 and Year 2 for `BSCS` and `BSIT` with repeating section codes (`CS-F1`, `CS-F2`, `IT-G1`, `IT-G2`), compliant with block-wide capacity and schedule overlap constraints between Monday and Saturday (never Sunday).
+  - Populates zero student carts, enrollments, balances, or grades to keep a clean slate for user testing.
+
 
 

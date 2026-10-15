@@ -161,28 +161,34 @@ export default function AdminFacultyPage() {
   const [evaluationsError, setEvaluationsError] = useState('')
 
   // Form State for Create / Edit
+  const [departmentList, setDepartmentList] = useState([])
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     contactNumber: '',
     employeeNumber: '',
+    departmentId: '',
     department: 'College of Computer Studies',
     position: 'Instructor I',
   })
   const [formSaving, setFormSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
-  // Load faculty list
+  // Load faculty list and departments
   const fetchFaculty = async () => {
     setLoading(true)
     setError('')
     try {
-      const res = await api.get('/admin/faculty')
-      setFacultyList(res.data || [])
+      const [facRes, deptRes] = await Promise.all([
+        api.get('/admin/faculty'),
+        api.get('/departments'),
+      ])
+      setFacultyList(facRes.data || [])
+      setDepartmentList(deptRes.data || [])
       // If a faculty member is currently open in view modal, refresh their details
       if (viewFaculty) {
-        const updated = (res.data || []).find((f) => f.id === viewFaculty.id)
+        const updated = (facRes.data || []).find((f) => f.id === viewFaculty.id)
         if (updated) setViewFaculty(updated)
       }
     } catch (err) {
@@ -320,13 +326,15 @@ export default function AdminFacultyPage() {
 
   // Open Create Modal
   const handleOpenCreate = () => {
+    const firstDept = departmentList[0]
     setFormData({
       name: '',
       email: '',
       password: 'password123',
       contactNumber: '',
       employeeNumber: '',
-      department: 'College of Computer Studies',
+      departmentId: firstDept?.id || '',
+      department: firstDept?.name || 'College of Computer Studies',
       position: 'Instructor I',
     })
     setFormError('')
@@ -342,6 +350,7 @@ export default function AdminFacultyPage() {
       password: '',
       contactNumber: f.contactNumber || '',
       employeeNumber: f.employeeNumber || '',
+      departmentId: f.departmentId || '',
       department: f.department || 'College of Computer Studies',
       position: f.position || 'Instructor I',
     })
@@ -382,7 +391,8 @@ export default function AdminFacultyPage() {
           email: formData.email.trim(),
           contactNumber: formData.contactNumber?.trim() || null,
           employeeNumber: formData.employeeNumber?.trim() || null,
-          department: formData.department.trim(),
+          departmentId: formData.departmentId || null,
+          department: formData.department?.trim() || null,
           position: formData.position.trim(),
           password: formData.password?.trim() || null,
         }
@@ -399,7 +409,8 @@ export default function AdminFacultyPage() {
           password: formData.password || 'password123',
           contactNumber: formData.contactNumber?.trim() || null,
           employeeNumber: formData.employeeNumber?.trim() || null,
-          department: formData.department.trim(),
+          departmentId: formData.departmentId || null,
+          department: formData.department?.trim() || null,
           position: formData.position.trim(),
         }
         const res = await api.post('/admin/faculty', payload)
@@ -1203,8 +1214,7 @@ export default function AdminFacultyPage() {
                                 {subj.subjectName}
                               </h4>
                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                {subj.units} units · {subj.course} · Year{' '}
-                                {subj.yearLevel} · {subj.semester}
+                                {subj.units} units ({subj.lectureUnits || 0} lec, {subj.labUnits || 0} lab) · {subj.departmentCode || subj.departmentName || 'General'}
                               </p>
                             </div>
                             <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-semibold border border-emerald-200 dark:border-emerald-800">
@@ -1496,21 +1506,28 @@ export default function AdminFacultyPage() {
                 {/* Department & Position */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Department" htmlFor="createDept">
-                    <input
+                    <select
                       id="createDept"
-                      list="departmentsList"
-                      value={formData.department}
-                      onChange={(e) =>
-                        setFormData({ ...formData, department: e.target.value })
-                      }
+                      value={formData.departmentId || ''}
+                      onChange={(e) => {
+                        const dId = e.target.value
+                        const dObj = departmentList.find((d) => d.id === dId)
+                        setFormData({
+                          ...formData,
+                          departmentId: dId,
+                          department: dObj ? dObj.name : '',
+                        })
+                      }}
                       className={inputClass}
                       required
-                    />
-                    <datalist id="departmentsList">
-                      {COMMON_DEPARTMENTS.map((d) => (
-                        <option key={d} value={d} />
+                    >
+                      <option value="">-- Select Department --</option>
+                      {departmentList.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
                       ))}
-                    </datalist>
+                    </select>
                   </Field>
 
                   <Field label="Academic Position" htmlFor="createPos">
@@ -1645,21 +1662,28 @@ export default function AdminFacultyPage() {
                 {/* Department & Position */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field label="Department" htmlFor="editDept">
-                    <input
+                    <select
                       id="editDept"
-                      list="editDeptList"
-                      value={formData.department}
-                      onChange={(e) =>
-                        setFormData({ ...formData, department: e.target.value })
-                      }
+                      value={formData.departmentId || ''}
+                      onChange={(e) => {
+                        const dId = e.target.value
+                        const dObj = departmentList.find((d) => d.id === dId)
+                        setFormData({
+                          ...formData,
+                          departmentId: dId,
+                          department: dObj ? dObj.name : '',
+                        })
+                      }}
                       className={inputClass}
                       required
-                    />
-                    <datalist id="editDeptList">
-                      {COMMON_DEPARTMENTS.map((d) => (
-                        <option key={d} value={d} />
+                    >
+                      <option value="">-- Select Department --</option>
+                      {departmentList.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
                       ))}
-                    </datalist>
+                    </select>
                   </Field>
 
                   <Field label="Academic Position" htmlFor="editPos">

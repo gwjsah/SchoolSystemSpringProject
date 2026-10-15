@@ -90,10 +90,72 @@ public final class Responses {
             String id, String sectionCode, String courseCode, int yearLevel, int capacity,
             int classCount, List<SectionDto> classes) {}
 
+    public record DepartmentDto(
+            String id,
+            String code,
+            String name,
+            String description,
+            long courseCount,
+            long subjectCount,
+            long facultyCount) {}
+
+    public record CurriculumPlacementDto(
+            String id,
+            String courseCode,
+            String courseName,
+            int yearLevel,
+            Semester semester) {}
+
+    public record SubjectCourseOverrideDto(
+            String courseCode,
+            com.schoolsystem.entity.enums.OverrideType type) {}
+
     public record SubjectDto(
-            String id, String subjectCode, String subjectName, int units, int yearLevel,
-            Semester semester, String course, List<String> prerequisites,
-            List<AccountDto> assignedFaculty) {}
+            String id,
+            String subjectCode,
+            String subjectName,
+            int units,
+            int lectureUnits,
+            int labUnits,
+            boolean openToAll,
+            String departmentId,
+            String departmentCode,
+            String departmentName,
+            List<String> prerequisites,
+            List<AccountDto> assignedFaculty,
+            List<CurriculumPlacementDto> curriculumPlacements,
+            List<SubjectCourseOverrideDto> overrides,
+            List<String> eligibleCourses,
+            boolean recommended) {}
+
+    public record CurriculumEntryDto(
+            String id,
+            String courseCode,
+            String courseName,
+            String subjectCode,
+            String subjectName,
+            int units,
+            int lectureUnits,
+            int labUnits,
+            int yearLevel,
+            Semester semester,
+            String departmentCode,
+            List<String> prerequisites) {}
+
+    public record CurriculumTermDto(
+            int yearLevel,
+            Semester semester,
+            int totalUnits,
+            int totalLectureUnits,
+            int totalLabUnits,
+            List<CurriculumEntryDto> entries) {}
+
+    public record CurriculumResponse(
+            String courseCode,
+            String courseName,
+            int totalUnits,
+            List<CurriculumTermDto> terms,
+            List<String> advisoryWarnings) {}
 
     public record CourseDto(String id, String code, String name, String sectionPrefix) {}
 
@@ -143,6 +205,8 @@ public final class Responses {
             String contactNumber,
             String employeeNumber,
             String department,
+            String departmentId,
+            String departmentCode,
             String position,
             List<SubjectDto> assignedSubjects,
             List<SectionDto> sections) {}

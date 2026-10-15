@@ -59,22 +59,43 @@ export default function BlockTimetable({
     if (!activeSlot) return null
     const row = rows[activeSlot.rowIdx]
     if (!row) return null
-    const slotConfig = activeSlot.slotType === 'LECTURE' ? row.lecture : row.lab
+
+    // Support both multi-line format (`row.lines`) and legacy `row.lecture`/`row.lab`
+    let slotConfig = null
+    let lineId = activeSlot.lineId
+    let slotType = activeSlot.slotType || 'LECTURE'
+    let label = activeSlot.label
+
+    if (Array.isArray(row.lines) && row.lines.length > 0) {
+      slotConfig = row.lines.find((l) => l.id === activeSlot.lineId) || row.lines[0]
+      if (slotConfig) {
+        lineId = slotConfig.id
+        slotType = slotConfig.slotType || slotType
+        label = slotConfig.label || label
+      }
+    } else {
+      slotConfig = activeSlot.slotType === 'LECTURE' ? row.lecture : row.lab
+      lineId = activeSlot.slotType === 'LECTURE' ? 'lecture' : 'lab'
+    }
+
     const durationMin =
       slotConfig?.startTime && slotConfig?.endTime
         ? Math.max(30, toMinutes(slotConfig.endTime) - toMinutes(slotConfig.startTime))
-        : activeSlot.slotType === 'LECTURE'
-        ? 120 // 2 hours default
+        : slotType === 'LECTURE'
+        ? 90 // 1.5 hours default
         : 180 // 3 hours default
 
     const fac = facultyList.find((f) => f.id === row.facultyId)
+    const slotKey = lineId ? `${row.subjectCode}-${lineId}` : `${row.subjectCode}-${slotType}`
 
     return {
-      slotKey: `${row.subjectCode}-${activeSlot.slotType}`,
+      slotKey,
       rowIdx: activeSlot.rowIdx,
+      lineId: lineId || (slotType === 'LECTURE' ? 'lecture' : 'lab'),
       subjectCode: row.subjectCode,
       subjectName: row.subjectName,
-      slotType: activeSlot.slotType,
+      slotType,
+      label: label || (slotType === 'LAB' ? 'Lab' : 'Lecture'),
       durationMin,
       facultyId: row.facultyId,
       facultyName: fac?.name || 'Unassigned Instructor',
@@ -193,7 +214,7 @@ export default function BlockTimetable({
     })
 
     if (check.fits) {
-      onUpdateSlotTime(activeSlotDetails.rowIdx, activeSlotDetails.slotType, {
+      onUpdateSlotTime(activeSlotDetails.rowIdx, activeSlotDetails.lineId || activeSlotDetails.slotType, {
         day,
         startTime: minutesToTime(finalStart),
         endTime: minutesToTime(finalEnd),
@@ -238,12 +259,12 @@ export default function BlockTimetable({
                 <>
                   Placing{' '}
                   <span className="font-semibold text-accent">
-                    {activeSlotDetails.subjectCode} {activeSlotDetails.slotType === 'LECTURE' ? 'Lecture' : 'Lab'}
+                    {activeSlotDetails.subjectCode} {activeSlotDetails.label || (activeSlotDetails.slotType === 'LECTURE' ? 'Lecture' : 'Lab')}
                   </span>{' '}
                   ({activeSlotDetails.durationMin / 60}h) • {activeSlotDetails.facultyName}
                 </>
               ) : (
-                'Select a lecture or lab slot on the left to place on the grid'
+                'Select a class schedule slot on the left to place on the grid'
               )}
             </p>
           </div>
@@ -473,7 +494,7 @@ export default function BlockTimetable({
                                 : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300'
                             }`}
                           >
-                            {slot.slotType === 'LAB' ? 'Lab' : 'Lec'}
+                            {slot.label || (slot.slotType === 'LAB' ? 'Lab' : 'Lec')}
                           </span>
                         </div>
 

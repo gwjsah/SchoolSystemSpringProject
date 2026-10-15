@@ -145,13 +145,172 @@ export const getFacultyBusyIntervals = (facultyId, sections = [], currentBlockCo
 }
 
 /**
+ * Maps subject lecture/lab units to timetable schedule slot lines.
+ * Single source of truth for pattern rules.
+ *
+ * Rules:
+ * - labUnits >= 10 && lectureUnits === 0 -> Field / Practicum subject (CS421/IT421).
+ *   Field subject, off school setting: room is not required, schedule is optional.
+ * - labUnits > 0 && lectureUnits === 1 -> 1 Lecture line (1.5h default) + 1 Lab line (3.0h default).
+ * - lectureUnits === 3 && labUnits === 0 (GE) -> 2 Lecture lines of 1.5h each (Lecture 1, Lecture 2).
+ * - lectureUnits === 2 && labUnits === 0 (PE) -> 1 Lecture line (2.0h default) with advisory note.
+ * - Any other combination -> 1 Lecture line (if lec > 0) + 1 Lab line (if lab > 0) + "check pattern" note.
+ */
+export function deriveSlotLinesForSubject(subject) {
+  const lec = Number(subject.lectureUnits ?? (subject.units || 0))
+  const lab = Number(subject.labUnits ?? 0)
+
+  // 1. Practicum / Internship (e.g. 12 lab units, 0 lecture units)
+  if (lab >= 10 && lec === 0) {
+    return [
+      {
+        id: 'field',
+        slotType: 'LAB',
+        label: 'Field / Practicum',
+        defaultDurationMinutes: 180,
+        isOptional: true,
+        roomRequired: false,
+        note: 'Off-campus field subject: room not required, schedule is optional',
+      },
+    ]
+  }
+
+  // 2. Standard GE 3-unit Lecture -> 2 Lecture lines of 1.5h each
+  if (lec === 3 && lab === 0) {
+    return [
+      {
+        id: 'lec1',
+        slotType: 'LECTURE',
+        label: 'Lecture 1',
+        defaultDurationMinutes: 90,
+        isOptional: false,
+        roomRequired: true,
+      },
+      {
+        id: 'lec2',
+        slotType: 'LECTURE',
+        label: 'Lecture 2',
+        defaultDurationMinutes: 90,
+        isOptional: false,
+        roomRequired: true,
+      },
+    ]
+  }
+
+  // 3. Standard Major Class (1 lec unit, 2 lab units) -> 1 x 1.5h Lec + 1 x 3.0h Lab
+  if (lec === 1 && lab > 0) {
+    return [
+      {
+        id: 'lec',
+        slotType: 'LECTURE',
+        label: 'Lecture',
+        defaultDurationMinutes: 90,
+        isOptional: false,
+        roomRequired: true,
+      },
+      {
+        id: 'lab',
+        slotType: 'LAB',
+        label: 'Lab',
+        defaultDurationMinutes: 180,
+        isOptional: false,
+        roomRequired: true,
+      },
+    ]
+  }
+
+  // 4. PE / Single-session Lecture (2 lecture units, 0 lab units)
+  if (lec === 2 && lab === 0) {
+    return [
+      {
+        id: 'lec',
+        slotType: 'LECTURE',
+        label: 'Lecture',
+        defaultDurationMinutes: 120,
+        isOptional: false,
+        roomRequired: true,
+        note: 'Single 2-hour session (2 lecture units)',
+      },
+    ]
+  }
+
+  // 5. Any other custom combination
+  const lines = []
+  if (lec > 0) {
+    lines.push({
+      id: 'lec',
+      slotType: 'LECTURE',
+      label: 'Lecture',
+      defaultDurationMinutes: 90,
+      isOptional: false,
+      roomRequired: true,
+      note: 'Check pattern (custom units)',
+    })
+  }
+  if (lab > 0) {
+    lines.push({
+      id: 'lab',
+      slotType: 'LAB',
+      label: 'Lab',
+      defaultDurationMinutes: 180,
+      isOptional: false,
+      roomRequired: true,
+      note: 'Check pattern (custom units)',
+    })
+  }
+
+  return lines.length > 0
+    ? lines
+    : [
+        {
+          id: 'lec',
+          slotType: 'LECTURE',
+          label: 'Class',
+          defaultDurationMinutes: 90,
+          isOptional: false,
+          roomRequired: true,
+        },
+      ]
+}
+
+/**
  * Transforms the BlockBuilder modal `rows` into flat timetable slot objects.
+ * Handles both the new multi-line format (`row.lines`) and legacy `row.lecture`/`row.lab`.
  */
 export const extractDraftSlots = (rows = []) => {
   const slots = []
 
   rows.forEach((row, rowIdx) => {
-    // Lecture slot
+    // New multi-line structure
+    if (Array.isArray(row.lines) && row.lines.length > 0) {
+      row.lines.forEach((line) => {
+        if (line.enabled && line.day && line.startTime && line.endTime) {
+          const startMin = toMinutes(line.startTime)
+          const endMin = toMinutes(line.endTime)
+          if (endMin > startMin) {
+            slots.push({
+              slotKey: `${row.subjectCode}-${line.id}`,
+              rowIdx,
+              lineId: line.id,
+              subjectCode: row.subjectCode,
+              subjectName: row.subjectName,
+              slotType: line.slotType || 'LECTURE',
+              label: line.label || (line.slotType === 'LAB' ? 'Lab' : 'Lecture'),
+              day: line.day,
+              startTime: line.startTime,
+              endTime: line.endTime,
+              startMin,
+              endMin,
+              roomId: line.roomId,
+              facultyId: row.facultyId,
+            })
+          }
+        }
+      })
+      return
+    }
+
+    // Legacy fallback (row.lecture and row.lab)
     if (row.lecture?.enabled && row.lecture.day && row.lecture.startTime && row.lecture.endTime) {
       const startMin = toMinutes(row.lecture.startTime)
       const endMin = toMinutes(row.lecture.endTime)
@@ -159,9 +318,11 @@ export const extractDraftSlots = (rows = []) => {
         slots.push({
           slotKey: `${row.subjectCode}-LECTURE`,
           rowIdx,
+          lineId: 'lecture',
           subjectCode: row.subjectCode,
           subjectName: row.subjectName,
           slotType: 'LECTURE',
+          label: 'Lecture',
           day: row.lecture.day,
           startTime: row.lecture.startTime,
           endTime: row.lecture.endTime,
@@ -173,7 +334,6 @@ export const extractDraftSlots = (rows = []) => {
       }
     }
 
-    // Lab slot
     if (row.lab?.enabled && row.lab.day && row.lab.startTime && row.lab.endTime) {
       const startMin = toMinutes(row.lab.startTime)
       const endMin = toMinutes(row.lab.endTime)
@@ -181,9 +341,11 @@ export const extractDraftSlots = (rows = []) => {
         slots.push({
           slotKey: `${row.subjectCode}-LAB`,
           rowIdx,
+          lineId: 'lab',
           subjectCode: row.subjectCode,
           subjectName: row.subjectName,
           slotType: 'LAB',
+          label: 'Lab',
           day: row.lab.day,
           startTime: row.lab.startTime,
           endTime: row.lab.endTime,

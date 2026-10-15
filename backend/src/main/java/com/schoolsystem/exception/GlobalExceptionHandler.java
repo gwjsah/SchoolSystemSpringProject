@@ -36,8 +36,8 @@ public class GlobalExceptionHandler {
     }
 
     /** Business rule conflicts (section full, schedule clash, period closed...). */
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ApiError> conflict(IllegalStateException e) {
+    @ExceptionHandler({IllegalStateException.class, ConflictException.class})
+    public ResponseEntity<ApiError> conflict(RuntimeException e) {
         return build(HttpStatus.CONFLICT, e.getMessage());
     }
 

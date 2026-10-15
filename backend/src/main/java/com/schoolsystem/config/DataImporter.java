@@ -35,6 +35,7 @@ import com.schoolsystem.repository.AnnouncementRepository;
 import com.schoolsystem.repository.BalanceRepository;
 import com.schoolsystem.repository.CompletedSubjectRepository;
 import com.schoolsystem.repository.CourseRepository;
+import com.schoolsystem.repository.DepartmentRepository;
 import com.schoolsystem.repository.EnrollmentPeriodRepository;
 import com.schoolsystem.repository.EnrollmentRepository;
 import com.schoolsystem.repository.FacultyEvaluationRepository;
@@ -96,6 +97,8 @@ public class DataImporter implements ApplicationRunner {
     private final QuarterlyScheduleRepository quarterlyScheduleRepository;
     private final PaymentRepository paymentRepository;
     private final GradeRepository gradeRepository;
+    private final DepartmentRepository departmentRepository;
+    private final com.schoolsystem.repository.CurriculumEntryRepository curriculumEntryRepository;
     private final AnnouncementRepository announcementRepository;
     private final FacultyEvaluationRepository facultyEvaluationRepository;
     private final PasswordEncoder passwordEncoder;
@@ -160,7 +163,11 @@ public class DataImporter implements ApplicationRunner {
                 case FACULTY -> {
                     Faculty f = new Faculty();
                     f.setEmployeeNumber(req(n, "employeeNumber"));
-                    f.setDepartment(req(n, "department"));
+                    String dText = req(n, "department");
+                    com.schoolsystem.entity.Department dept = departmentRepository.findByCodeIgnoreCase(dText)
+                            .or(() -> departmentRepository.findByNameIgnoreCase(dText))
+                            .orElseGet(() -> departmentRepository.findAll().stream().findFirst().orElse(null));
+                    f.setDepartment(dept);
                     f.setPosition(req(n, "position"));
                     yield f;
                 }
@@ -230,14 +237,26 @@ public class DataImporter implements ApplicationRunner {
     /** Keyed by subjectCode, because enrollments, grades and sections refer to subjects by code. */
     private Map<String, Subject> importSubjects(JsonNode nodes) {
         Map<String, Subject> map = new HashMap<>();
+        com.schoolsystem.entity.Department ccs = departmentRepository.findByCodeIgnoreCase("CCS").orElse(null);
+        com.schoolsystem.entity.Department ge = departmentRepository.findByCodeIgnoreCase("GE").orElse(null);
+
         for (JsonNode n : nodes) {
             Subject subject = new Subject();
             subject.setSubjectCode(req(n, "subjectCode"));
             subject.setSubjectName(req(n, "subjectName"));
-            subject.setUnits(integer(n, "units"));
-            subject.setYearLevel(integer(n, "yearLevel"));
-            subject.setSemester(Semester.valueOf(req(n, "semester")));
-            subject.setCourse(req(n, "course"));
+            int u = integer(n, "units");
+            String courseText = req(n, "course");
+            boolean isGe = "GEN".equalsIgnoreCase(courseText);
+            subject.setOpenToAll(isGe);
+            subject.setDepartment(isGe ? ge : ccs);
+            if (isGe) {
+                subject.setLectureUnits(u);
+                subject.setLabUnits(0);
+            } else {
+                subject.setLectureUnits(1);
+                subject.setLabUnits(Math.max(0, u - 1));
+            }
+            subject.syncUnits();
             subject.setPrerequisites(strings(n.get("prerequisites")));
             map.put(subject.getSubjectCode(), subjectRepository.save(subject));
         }
@@ -254,8 +273,8 @@ public class DataImporter implements ApplicationRunner {
             Subject subject = find(subjects, req(n, "subjectCode"), "subject");
             int cap = integer(n, "capacity");
 
-            String courseCode = subject.getCourse();
-            int yLevel = subject.getYearLevel();
+            String courseCode = "BSCS";
+            int yLevel = 1;
             String blockKey = courseCode.toUpperCase() + "::" + yLevel + "::" + sCode.toUpperCase();
 
             com.schoolsystem.entity.SectionBlock block = blockMap.computeIfAbsent(blockKey, k -> {

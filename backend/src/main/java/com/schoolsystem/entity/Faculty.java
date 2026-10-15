@@ -16,9 +16,9 @@ public class Faculty extends Account {
     @Column(nullable = false, unique = true, updatable = false)
     private String employeeNumber;
 
-    @NotBlank(message = "Department cannot be empty")
-    @Column(nullable = false)
-    private String department;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    private Department department;
 
     @NotBlank(message = "Position cannot be empty")
     @Column(nullable = false)

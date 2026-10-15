@@ -69,7 +69,7 @@ public final class DtoMapper {
             admissionStatus = s.getAdmissionStatus();
         } else if (a instanceof Faculty f) {
             employeeNumber = f.getEmployeeNumber();
-            department = f.getDepartment();
+            department = f.getDepartment() != null ? f.getDepartment().getName() : null;
             position = f.getPosition();
         } else if (a instanceof Admin ad) {
             employeeNumber = ad.getEmployeeNumber();
@@ -155,12 +155,55 @@ public final class DtoMapper {
     }
 
     public static SubjectDto subject(Subject s) {
+        return subject(s, List.of(), false);
+    }
+
+    public static SubjectDto subject(Subject s, List<String> eligibleCourses) {
+        return subject(s, eligibleCourses, false);
+    }
+
+    public static SubjectDto subject(Subject s, List<String> eligibleCourses, boolean recommended) {
         List<AccountDto> facultyDtos = s.getAssignedFaculties() != null
                 ? s.getAssignedFaculties().stream().map(DtoMapper::account).toList()
                 : List.of();
-        return new SubjectDto(s.getId(), s.getSubjectCode(), s.getSubjectName(), s.getUnits(),
-                s.getYearLevel(), s.getSemester(), s.getCourse(), List.copyOf(s.getPrerequisites()),
-                facultyDtos);
+
+        List<Responses.CurriculumPlacementDto> placements = s.getCurriculumEntries() != null
+                ? s.getCurriculumEntries().stream()
+                    .map(ce -> new Responses.CurriculumPlacementDto(
+                            ce.getId(),
+                            ce.getCourse() != null ? ce.getCourse().getCode() : null,
+                            ce.getCourse() != null ? ce.getCourse().getName() : null,
+                            ce.getYearLevel(),
+                            ce.getSemester()))
+                    .toList()
+                : List.of();
+
+        List<Responses.SubjectCourseOverrideDto> overrides = s.getCourseOverrides() != null
+                ? s.getCourseOverrides().stream()
+                    .map(o -> new Responses.SubjectCourseOverrideDto(
+                            o.getCourse() != null ? o.getCourse().getCode() : null,
+                            o.getOverrideType()))
+                    .toList()
+                : List.of();
+
+        return new SubjectDto(
+                s.getId(),
+                s.getSubjectCode(),
+                s.getSubjectName(),
+                s.getUnits(),
+                s.getLectureUnits(),
+                s.getLabUnits(),
+                s.isOpenToAll(),
+                s.getDepartment() != null ? s.getDepartment().getId() : null,
+                s.getDepartment() != null ? s.getDepartment().getCode() : null,
+                s.getDepartment() != null ? s.getDepartment().getName() : null,
+                List.copyOf(s.getPrerequisites()),
+                facultyDtos,
+                placements,
+                overrides,
+                eligibleCourses != null ? eligibleCourses : List.of(),
+                recommended
+        );
     }
 
     public static CourseDto course(Course c) {
